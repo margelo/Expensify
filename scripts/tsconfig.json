@@ -1,12 +1,13 @@
 {
-    "extends": "../tsconfig.json",
     "ts-node": {
         "require": ["tsconfig-paths/register", "./stubReactNative.js"],
         "transpileOnly": true,
         "compilerOptions": {
             "module": "commonjs",
             "moduleResolution": "node",
-            "target": "es2020"
+            "target": "es2020",
+            "types": ["node"],
+            "esModuleInterop": true
         }
     }
 }
