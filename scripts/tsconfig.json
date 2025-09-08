@@ -5,6 +5,7 @@
         "transpileOnly": true,
         "compilerOptions": {
             "module": "commonjs",
+            "moduleResolution": "node",
             "target": "es2020"
         }
     }
