@@ -8,9 +8,8 @@ import type {LayoutChangeEvent} from 'react-native';
 import {DeviceEventEmitter, InteractionManager, View} from 'react-native';
 import type {OnyxEntry} from 'react-native-onyx';
 import {renderScrollComponent as renderActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
-import InvertedFlatList from '@components/InvertedFlatList';
-import {AUTOSCROLL_TO_TOP_THRESHOLD} from '@components/InvertedFlatList/BaseInvertedFlatList';
-import type {BaseInvertedFlatListProps} from '@components/InvertedFlatList/BaseInvertedFlatList/types';
+import InvertedFlatList, {AUTOSCROLL_TO_TOP_THRESHOLD} from '@components/InvertedFlatList';
+import type {InvertedFlatListProps} from '@components/InvertedFlatList/types';
 import useKeyboardDismissibleFlatListValues from '@components/KeyboardDismissibleFlatList/useKeyboardDismissibleFlatListValues';
 import {PersonalDetailsContext, usePersonalDetails} from '@components/OnyxListItemProvider';
 import ReportActionsSkeletonView from '@components/ReportActionsSkeletonView';
@@ -380,7 +379,7 @@ function ReportActionsList({
         isInverted: true,
     });
 
-    const resetOnScrollToEndAfterLayout: BaseInvertedFlatListProps<OnyxTypes.ReportAction>['onScroll'] = useCallback(() => {
+    const resetOnScrollToEndAfterLayout: InvertedFlatListProps<OnyxTypes.ReportAction>['onScroll'] = useCallback(() => {
         if (!shouldScrollToEndAfterLayout || (hasCreatedActionAdded && !isOffline)) {
             return;
         }
