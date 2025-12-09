@@ -44,7 +44,7 @@ NEW_DOT_FLAG="${STANDALONE_NEW_DOT:-false}"
 if [[ "$IS_HYBRID_APP_REPO" == "true" && "$NEW_DOT_FLAG" == "false" ]]; then
     # Set HybridApp-specific arguments
     IOS_MODE="Debug"
-    ANDROID_MODE="Release"
+    ANDROID_MODE="release"
     SCHEME="Expensify Dev"
     APP_ID="org.me.mobiexpensifyg.dev"
 
@@ -53,6 +53,7 @@ if [[ "$IS_HYBRID_APP_REPO" == "true" && "$NEW_DOT_FLAG" == "false" ]]; then
 
     echo
     success "Starting a HybridApp build!"
+    echo $ANDROID_MODE
     export CUSTOM_APK_NAME="Expensify-debug.apk"
     export IS_HYBRID_APP="true"
 else

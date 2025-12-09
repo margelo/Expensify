@@ -3,7 +3,6 @@ import * as Sentry from '@sentry/react-native';
 import React, {useEffect} from 'react';
 import {LogBox, View} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import performance from 'react-native-performance';
 import Performance from 'react-native-performance';
 import {PickerStateProvider} from 'react-native-picker-select';
 import {stopProfiling} from 'react-native-release-profiler';
