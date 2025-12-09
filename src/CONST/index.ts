@@ -7475,6 +7475,7 @@ const CONST = {
         MARKERS: {
             RUN_JS_BUNDLE_START: 'runJsBundleStart',
             HERMES_YOUNG_GC_START: 'hermesYoungGcStart',
+            TTI_REACHED: 'expensifyTtiReached',
         },
     },
 } as const;

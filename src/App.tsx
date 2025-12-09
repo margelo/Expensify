@@ -4,6 +4,7 @@ import React, {useEffect} from 'react';
 import {LogBox, View} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import performance from 'react-native-performance';
+import Performance from 'react-native-performance';
 import {PickerStateProvider} from 'react-native-picker-select';
 import {stopProfiling} from 'react-native-release-profiler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
@@ -74,6 +75,10 @@ const StrictModeWrapper = CONFIG.USE_REACT_STRICT_MODE_IN_DEV ? React.StrictMode
 function App() {
     useDefaultDragAndDrop();
     OnyxUpdateManager();
+
+    useEffect(() => {
+        Performance.mark(CONST.PERFORMANCE.MARKERS.TTI_REACHED);
+    }, []);
 
     useEffect(() => {
         setTimeout(() => {

@@ -14,8 +14,8 @@ function TtiMeasurement() {
     const [runJsBundleStart, setRunJsBundleStart] = useState<number | undefined>(undefined);
     const [runJsBundleStartTimestamp, setRunJsBundleStartTimestamp] = useState<number | undefined>(undefined);
 
-    const [hermesYoungGcStart, setHermesYoungGcStart] = useState<number | undefined>(undefined);
-    const [hermesYoungGcStartTimestamp, setHermesYoungGcStartTimestamp] = useState<number | undefined>(undefined);
+    const [ttiReached, setTtiReached] = useState<number | undefined>(undefined);
+    const [ttiReachedTimestamp, setTtiReachedTimestamp] = useState<number | undefined>(undefined);
 
     const basedOnStartup = useCallback(
         (timestamp: number | undefined) => {
@@ -44,13 +44,13 @@ function TtiMeasurement() {
                 const timestampBasedOnStartup = basedOnStartup(entry.startTime);
 
                 switch (entry.name) {
-                    case CONST.PERFORMANCE.MARKERS.HERMES_YOUNG_GC_START:
-                        setHermesYoungGcStartTimestamp(entry.startTime);
-                        setHermesYoungGcStart(timestampBasedOnStartup);
-                        break;
                     case CONST.PERFORMANCE.MARKERS.RUN_JS_BUNDLE_START:
                         setRunJsBundleStartTimestamp(entry.startTime);
                         setRunJsBundleStart(timestampBasedOnStartup);
+                        break;
+                    case CONST.PERFORMANCE.MARKERS.TTI_REACHED:
+                        setTtiReachedTimestamp(entry.startTime);
+                        setTtiReached(timestampBasedOnStartup);
                         break;
                     default:
                         break;
@@ -82,14 +82,14 @@ function TtiMeasurement() {
                     <View style={{borderWidth: 1, borderColor: 'black', padding: 10, marginBottom: 20}}>
                         <Text color="black">First draw: {firstDrawTime}ms</Text>
                         <Text color="black">Bundle execution: {runJsBundleStart}ms</Text>
-                        <Text color="black">Hermes young GC start: {hermesYoungGcStart}ms</Text>
+                        <Text color="black">TTI reached: {ttiReached}ms</Text>
                     </View>
 
                     <View style={{borderWidth: 1, borderColor: 'black', padding: 10}}>
                         <Text color="black">Startup: {ttiMeasurement.applicationStartup}ms</Text>
                         <Text color="black">First draw: {ttiMeasurement.firstDraw}ms</Text>
                         <Text color="black">Run JS bundle: {runJsBundleStartTimestamp}ms</Text>
-                        <Text color="black">Hermes young GC: {hermesYoungGcStartTimestamp}ms</Text>
+                        <Text color="black">TTI reached: {ttiReachedTimestamp}ms</Text>
                     </View>
                 </View>
             )}
