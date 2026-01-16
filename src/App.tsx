@@ -22,6 +22,7 @@ import FullScreenLoaderContextProvider from './components/FullScreenLoaderContex
 import HTMLEngineProvider from './components/HTMLEngineProvider';
 import InitialURLContextProvider from './components/InitialURLContextProvider';
 import {InputBlurContextProvider} from './components/InputBlurContext';
+import {KeyboardDismissibleFlatListContextProvider} from './components/KeyboardDismissibleFlatList/KeyboardDismissibleFlatListContext';
 import KeyboardProvider from './components/KeyboardProvider';
 import KYCWallContextProvider from './components/KYCWall/KYCWallContext';
 import {LocaleContextProvider} from './components/LocaleContextProvider';
@@ -110,6 +111,7 @@ function App() {
                                     components={[
                                         OnyxListItemProvider,
                                         CurrentUserPersonalDetailsProvider,
+                                        LocaleContextProvider,
                                         ThemeProvider,
                                         ThemeStylesProvider,
                                         ThemeIllustrationsProvider,
@@ -117,7 +119,6 @@ function App() {
                                         HTMLEngineProvider,
                                         PortalProvider,
                                         SafeArea,
-                                        LocaleContextProvider,
                                         PopoverContextProvider,
                                         CurrentReportIDContextProvider,
                                         ScrollOffsetContextProvider,
@@ -133,6 +134,7 @@ function App() {
                                         VideoPopoverMenuContextProvider,
                                         KeyboardProvider,
                                         KeyboardStateProvider,
+                                        KeyboardDismissibleFlatListContextProvider,
                                         SearchRouterContextProvider,
                                         ProductTrainingContextProvider,
                                         InputBlurContextProvider,
@@ -163,8 +165,6 @@ function App() {
         </StrictModeWrapper>
     );
 }
-
-App.displayName = 'App';
 
 const WrappedApp = Sentry.wrap(App);
 WrappedApp.displayName = 'App';
