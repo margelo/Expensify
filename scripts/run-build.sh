@@ -82,7 +82,7 @@ case "$BUILD" in
             fi
         fi
 
-        SENTRY_DISABLE_AUTO_UPLOAD=true npx rock run:android -local --variant $ANDROID_MODE --app-id $APP_ID --active-arch-only --verbose --dev-server "${ROCK_FLAGS[@]}"
+        SENTRY_DISABLE_AUTO_UPLOAD=true npx rock run:android --local --device R9WW40GQ67E --variant $ANDROID_MODE --app-id $APP_ID --active-arch-only --verbose --dev-server "${ROCK_FLAGS[@]}"
         ;;
     *)
         print_error_and_exit
