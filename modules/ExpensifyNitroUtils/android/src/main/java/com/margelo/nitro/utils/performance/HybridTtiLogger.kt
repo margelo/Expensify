@@ -30,13 +30,14 @@ class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
 
             Log.d("PERFORMANCE_METRICS", "invoke $applicationTimestampString $firstDrawTimestampString");
 
-            for (listener in measurementListeners) {
+            val listeners = ArrayList(measurementListeners)
+            measurementListeners.clear()
+            for (listener in listeners) {
                 listener?.invoke(TtiMeasurementValue(
                     applicationStartup = applicationStartupTimestamp!!,
-                    firstDraw= firstDrawTimestamp!!,
+                    firstDraw = firstDrawTimestamp!!,
                     bundleExecution = bundleExecutionTimestamp ?: 0.0
                 ))
-                measurementListeners.remove(listener)
             }
         }
 
