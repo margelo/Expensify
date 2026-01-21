@@ -1,5 +1,4 @@
-import {useEffect} from 'react';
-import {getHostComponent, NitroModules} from 'react-native-nitro-modules';
+import {callback, getHostComponent, NitroModules} from 'react-native-nitro-modules';
 import type * as ContactsModuleSpec from './specs/ContactsModule.nitro';
 import type TtiLogger from './specs/TtiLogger.nitro';
 import type {OnMeasurementsReadyListener, TtiMeasurementValue} from './specs/TtiLogger.nitro';
@@ -17,15 +16,16 @@ type TtiMeasurementViewProps = Omit<TtiMeasurementViewPropsInternal, 'ttiLogger'
 };
 
 function TtiMeasurementView({onMeasurementsReady, ...restProps}: TtiMeasurementViewProps) {
-    useEffect(() => {
-        TtiLoggerNitroModule.setOnMeasurementsReadyListener(onMeasurementsReady);
-    }, [onMeasurementsReady]);
+    const setOnMeasurementsReadyListener = (measurements: TtiMeasurementValue) => {
+        console.log(`[PERFORMANCE_METRICS] TTILogger callback set ${JSON.stringify(measurements)}`);
+        onMeasurementsReady?.(measurements);
+    };
 
     return (
         <TtiMeasurementViewImplementation
             // eslint-disable-next-line react/jsx-props-no-spreading
             {...restProps}
-            ttiLogger={TtiLoggerNitroModule}
+            onMeasurementsReady={callback(setOnMeasurementsReadyListener)}
         />
     );
 }

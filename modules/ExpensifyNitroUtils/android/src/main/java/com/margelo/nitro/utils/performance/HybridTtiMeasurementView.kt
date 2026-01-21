@@ -1,6 +1,7 @@
 package com.margelo.nitro.utils
 
 import android.os.Build
+import android.util.Log
 import android.view.View
 import androidx.annotation.RequiresApi
 import com.facebook.react.uimanager.ThemedReactContext
@@ -9,13 +10,15 @@ import java.util.concurrent.TimeUnit
 
 class HybridTtiMeasurementView(val context: ThemedReactContext) : HybridTtiMeasurementViewSpec() {
     // Props
+    override var onMeasurementsReady: OnMeasurementsReadyListener? = null
+
     var firstDrawTimestamp: Long? = null
-    override lateinit var ttiLogger: HybridTtiLoggerSpec
 
     // View
     override val view: View = View(context)
 
     init {
+        HybridTtiLogger.setOnMeasurementsReadyListener(onMeasurementsReady);
         registerDrawListener()
     }
 
@@ -29,7 +32,10 @@ class HybridTtiMeasurementView(val context: ThemedReactContext) : HybridTtiMeasu
             System.nanoTime()
             val newFirstDrawTimestamp = TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
             firstDrawTimestamp = newFirstDrawTimestamp
-            ttiLogger.mark(TtiMeasurementName.FIRSTDRAW, newFirstDrawTimestamp.toDouble())
+
+            Log.d("PERFORMANCE_METRICS", "firstDrawTimestamp $newFirstDrawTimestamp");
+
+            HybridTtiLogger.mark(TtiMeasurementName.FIRSTDRAW, newFirstDrawTimestamp.toDouble())
         }
     }
 }

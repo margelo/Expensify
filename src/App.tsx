@@ -76,9 +76,9 @@ function App() {
     useDefaultDragAndDrop();
     OnyxUpdateManager();
 
-    useEffect(() => {
-        Performance.mark(CONST.PERFORMANCE.MARKERS.TTI_REACHED);
-    }, []);
+    // useEffect(() => {
+    //     Performance.mark(CONST.PERFORMANCE.MARKERS.TTI_REACHED);
+    // }, []);
 
     useEffect(() => {
         setTimeout(() => {

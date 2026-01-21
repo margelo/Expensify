@@ -1,7 +1,8 @@
 import {useIsFocused} from '@react-navigation/native';
 import * as Sentry from '@sentry/react-native';
-import React, {useCallback, useRef} from 'react';
+import React, {useCallback, useEffect, useRef} from 'react';
 import {View} from 'react-native';
+import performance from 'react-native-performance';
 import type {EdgeInsets} from 'react-native-safe-area-context';
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
@@ -32,6 +33,10 @@ function SidebarLinksData({insets}: SidebarLinksDataProps) {
 
     const onLayout = useCallback(() => {
         endSpan(CONST.TELEMETRY.SPAN_NAVIGATE_TO_INBOX_TAB);
+    }, []);
+
+    useEffect(() => {
+        performance.mark(CONST.PERFORMANCE.MARKERS.TTI_REACHED);
     }, []);
 
     return (

@@ -1,42 +1,73 @@
 package com.margelo.nitro.utils
 
-import android.os.Build
-import android.view.View
-import androidx.annotation.RequiresApi
+import android.util.Log
 import com.facebook.react.uimanager.ThemedReactContext
-import com.margelo.nitro.utils.HybridTtiMeasurementViewSpec
-import com.margelo.nitro.utils.TtiMeasurementValue
-import com.margelo.nitro.utils.performance.FirstDrawDoneListener
 
 internal typealias OnMeasurementsReadyListener = (measurement: TtiMeasurementValue) -> Unit
 
 class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
-    var measurementListener: OnMeasurementsReadyListener? = null
 
     companion object {
+        val measurementListeners = ArrayList<OnMeasurementsReadyListener?>()
+
         var applicationStartupTimestamp: Double? = null
         var bundleExecutionTimestamp: Double? = null
         var firstDrawTimestamp: Double? = null
+
+        fun mark(name: TtiMeasurementName, timestamp: Double): Unit {
+            when (name) {
+                TtiMeasurementName.APPLICATIONSTARTUP -> applicationStartupTimestamp = applicationStartupTimestamp ?: timestamp
+                TtiMeasurementName.BUNDLEEXECUTION -> bundleExecutionTimestamp = bundleExecutionTimestamp ?: timestamp
+                TtiMeasurementName.FIRSTDRAW -> firstDrawTimestamp =firstDrawTimestamp ?: timestamp
+            }
+
+            if (applicationStartupTimestamp == null || firstDrawTimestamp == null) {
+                return
+            }
+
+            val applicationTimestampString = applicationStartupTimestamp!!.toBigDecimal().toPlainString()
+            val firstDrawTimestampString = firstDrawTimestamp!!.toBigDecimal().toPlainString()
+
+            Log.d("PERFORMANCE_METRICS", "invoke $applicationTimestampString $firstDrawTimestampString");
+
+            for (listener in measurementListeners) {
+                listener?.invoke(TtiMeasurementValue(
+                    applicationStartup = applicationStartupTimestamp!!,
+                    firstDraw= firstDrawTimestamp!!,
+                    bundleExecution = bundleExecutionTimestamp ?: 0.0
+                ))
+                measurementListeners.remove(listener)
+            }
+        }
+
+        fun setOnMeasurementsReadyListener(listener: ((measurement: TtiMeasurementValue) -> Unit)?) {
+            if (listener == null) {
+                return
+            }
+
+            if (applicationStartupTimestamp == null || firstDrawTimestamp == null) {
+                measurementListeners.add(listener)
+                return
+            }
+
+            val applicationTimestampString = applicationStartupTimestamp!!.toBigDecimal().toPlainString()
+            val firstDrawTimestampString = firstDrawTimestamp!!.toBigDecimal().toPlainString()
+
+            Log.d("PERFORMANCE_METRICS", "invoke direct $applicationTimestampString $firstDrawTimestampString");
+
+            listener.invoke(TtiMeasurementValue(
+                applicationStartup = applicationStartupTimestamp!!,
+                firstDraw= firstDrawTimestamp!!,
+                bundleExecution = bundleExecutionTimestamp ?: 0.0
+            ))
+        }
     }
+
     override fun mark(name: TtiMeasurementName, timestamp: Double): Unit {
-        when (name) {
-            TtiMeasurementName.APPLICATIONSTARTUP -> applicationStartupTimestamp = timestamp
-            TtiMeasurementName.BUNDLEEXECUTION -> bundleExecutionTimestamp = timestamp
-            TtiMeasurementName.FIRSTDRAW -> firstDrawTimestamp = timestamp
-        }
-
-        if (applicationStartupTimestamp == null || firstDrawTimestamp == null) {
-            return
-        }
-
-        measurementListener?.invoke(TtiMeasurementValue(
-            applicationStartup = applicationStartupTimestamp!!,
-            firstDraw= firstDrawTimestamp!!,
-            bundleExecution = bundleExecutionTimestamp ?: 0.0
-        ))
+        HybridTtiLogger.mark(name, timestamp);
     }
 
     override fun setOnMeasurementsReadyListener(listener: ((measurement: TtiMeasurementValue) -> Unit)?) {
-       measurementListener = listener
+        HybridTtiLogger.setOnMeasurementsReadyListener(listener);
     }
 }

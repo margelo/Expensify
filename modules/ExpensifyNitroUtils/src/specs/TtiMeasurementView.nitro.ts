@@ -1,9 +1,9 @@
 import type {HybridView, HybridViewMethods, HybridViewProps} from 'react-native-nitro-modules';
-import type TtiLogger from './TtiLogger.nitro';
+import type {OnMeasurementsReadyListener} from './TtiLogger.nitro';
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions, @typescript-eslint/no-empty-object-type
 interface TtiMeasurementViewProps extends HybridViewProps {
-    ttiLogger: TtiLogger;
+    onMeasurementsReady?: OnMeasurementsReadyListener;
 }
 
 type TtiMeasurementViewMethods = HybridViewMethods;
