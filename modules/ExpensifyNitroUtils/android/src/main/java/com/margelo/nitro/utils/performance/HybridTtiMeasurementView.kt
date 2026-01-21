@@ -11,6 +11,10 @@ import java.util.concurrent.TimeUnit
 class HybridTtiMeasurementView(val context: ThemedReactContext) : HybridTtiMeasurementViewSpec() {
     // Props
     override var onMeasurementsReady: OnMeasurementsReadyListener? = null
+        set(value) {
+            field = value;
+            HybridTtiLogger.setOnMeasurementsReadyListener(value);
+        }
 
     var firstDrawTimestamp: Long? = null
 
