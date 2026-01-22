@@ -10,11 +10,22 @@ import java.util.concurrent.TimeUnit
 
 class HybridTtiMeasurementView(val context: ThemedReactContext) : HybridTtiMeasurementViewSpec() {
     // Props
+    var listenerId: Double? = null
+
     override var onMeasurementsReady: OnMeasurementsReadyListener? = null
-        set(value) {
-            field = value;
-            HybridTtiLogger.setOnMeasurementsReadyListener(value);
+
+    override fun afterUpdate() {
+        val listener = onMeasurementsReady ?: return
+
+        val existingId = listenerId
+        if (existingId != null) {
+            // Update callback reference, keep same ID
+            HybridTtiLogger.updateListener(existingId, listener)
+        } else {
+            // First time - register new listener
+            listenerId = HybridTtiLogger.addMeasurementsReadyListener(listener)
         }
+    }
 
     var firstDrawTimestamp: Long? = null
 
@@ -22,7 +33,6 @@ class HybridTtiMeasurementView(val context: ThemedReactContext) : HybridTtiMeasu
     override val view: View = View(context)
 
     init {
-        HybridTtiLogger.setOnMeasurementsReadyListener(onMeasurementsReady);
         registerDrawListener()
     }
 
@@ -37,7 +47,7 @@ class HybridTtiMeasurementView(val context: ThemedReactContext) : HybridTtiMeasu
             val newFirstDrawTimestamp = TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
             firstDrawTimestamp = newFirstDrawTimestamp
 
-            Log.d("PERFORMANCE_METRICS", "firstDrawTimestamp $newFirstDrawTimestamp");
+            Log.d("PERFORMANCE_METRICS", "firstDrawTimestamp $newFirstDrawTimestamp")
 
             HybridTtiLogger.mark(TtiMeasurementName.FIRSTDRAW, newFirstDrawTimestamp.toDouble())
         }

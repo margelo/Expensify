@@ -10,7 +10,11 @@ type OnMeasurementsReadyListener = (measurement: TtiMeasurementValue) => void;
 interface TtiLogger extends HybridObject<{ios: 'swift'; android: 'kotlin'}> {
     mark(name: TtiMeasurementName, timestamp: number): void;
 
-    setOnMeasurementsReadyListener(onMeasurementsReadyListener?: OnMeasurementsReadyListener): void;
+    addMeasurementsReadyListener(onMeasurementsReadyListener: OnMeasurementsReadyListener): number;
+
+    removeMeasurementsReadyListener(listenerId: number): void;
+
+    getMeasurements(): TtiMeasurementValue | undefined;
 }
 
 export default TtiLogger;
