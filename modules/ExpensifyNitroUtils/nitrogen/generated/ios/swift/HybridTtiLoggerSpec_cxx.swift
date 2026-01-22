@@ -129,25 +129,48 @@ open class HybridTtiLoggerSpec_cxx {
   }
   
   @inline(__always)
-  public final func setOnMeasurementsReadyListener(onMeasurementsReadyListener: bridge.std__optional_std__function_void_const_TtiMeasurementValue_____measurement______) -> bridge.Result_void_ {
+  public final func addMeasurementsReadyListener(onMeasurementsReadyListener: bridge.Func_void_TtiMeasurementValue) -> bridge.Result_double_ {
     do {
-      try self.__implementation.setOnMeasurementsReadyListener(onMeasurementsReadyListener: { () -> ((_ measurement: TtiMeasurementValue) -> Void)? in
-        if bridge.has_value_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(onMeasurementsReadyListener) {
-          let __unwrapped = bridge.get_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(onMeasurementsReadyListener)
-          return { () -> (TtiMeasurementValue) -> Void in
-            let __wrappedFunction = bridge.wrap_Func_void_TtiMeasurementValue(__unwrapped)
-            return { (__measurement: TtiMeasurementValue) -> Void in
-              __wrappedFunction.call(__measurement)
-            }
-          }()
-        } else {
-          return nil
+      let __result = try self.__implementation.addMeasurementsReadyListener(onMeasurementsReadyListener: { () -> (TtiMeasurementValue) -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void_TtiMeasurementValue(onMeasurementsReadyListener)
+        return { (__measurement: TtiMeasurementValue) -> Void in
+          __wrappedFunction.call(__measurement)
         }
       }())
+      let __resultCpp = __result
+      return bridge.create_Result_double_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_double_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func removeMeasurementsReadyListener(listenerId: Double) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.removeMeasurementsReadyListener(listenerId: listenerId)
       return bridge.create_Result_void_()
     } catch (let __error) {
       let __exceptionPtr = __error.toCpp()
       return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func getMeasurements() -> bridge.Result_std__optional_TtiMeasurementValue__ {
+    do {
+      let __result = try self.__implementation.getMeasurements()
+      let __resultCpp = { () -> bridge.std__optional_TtiMeasurementValue_ in
+        if let __unwrappedValue = __result {
+          return bridge.create_std__optional_TtiMeasurementValue_(__unwrappedValue)
+        } else {
+          return .init()
+        }
+      }()
+      return bridge.create_Result_std__optional_TtiMeasurementValue__(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__optional_TtiMeasurementValue__(__exceptionPtr)
     }
   }
 }

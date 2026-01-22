@@ -49,14 +49,22 @@ abstract class HybridTtiLoggerSpec: HybridObject() {
   @Keep
   abstract fun mark(name: TtiMeasurementName, timestamp: Double): Unit
   
-  abstract fun setOnMeasurementsReadyListener(onMeasurementsReadyListener: ((measurement: TtiMeasurementValue) -> Unit)?): Unit
+  abstract fun addMeasurementsReadyListener(onMeasurementsReadyListener: (measurement: TtiMeasurementValue) -> Unit): Double
   
   @DoNotStrip
   @Keep
-  private fun setOnMeasurementsReadyListener_cxx(onMeasurementsReadyListener: Func_void_TtiMeasurementValue?): Unit {
-    val __result = setOnMeasurementsReadyListener(onMeasurementsReadyListener?.let { it })
+  private fun addMeasurementsReadyListener_cxx(onMeasurementsReadyListener: Func_void_TtiMeasurementValue): Double {
+    val __result = addMeasurementsReadyListener(onMeasurementsReadyListener)
     return __result
   }
+  
+  @DoNotStrip
+  @Keep
+  abstract fun removeMeasurementsReadyListener(listenerId: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun getMeasurements(): TtiMeasurementValue?
 
   private external fun initHybrid(): HybridData
 

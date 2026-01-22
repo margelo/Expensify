@@ -72,11 +72,27 @@ namespace margelo::nitro::utils {
         std::rethrow_exception(__result.error());
       }
     }
-    inline void setOnMeasurementsReadyListener(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& onMeasurementsReadyListener) override {
-      auto __result = _swiftPart.setOnMeasurementsReadyListener(onMeasurementsReadyListener);
+    inline double addMeasurementsReadyListener(const std::function<void(const TtiMeasurementValue& /* measurement */)>& onMeasurementsReadyListener) override {
+      auto __result = _swiftPart.addMeasurementsReadyListener(onMeasurementsReadyListener);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline void removeMeasurementsReadyListener(double listenerId) override {
+      auto __result = _swiftPart.removeMeasurementsReadyListener(std::forward<decltype(listenerId)>(listenerId));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline std::optional<TtiMeasurementValue> getMeasurements() override {
+      auto __result = _swiftPart.getMeasurements();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
     }
 
   private:

@@ -217,18 +217,18 @@ namespace margelo::nitro::utils::bridge::swift {
     return Func_void_TtiMeasurementValue_Wrapper(std::move(value));
   }
   
-  // pragma MARK: std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>
+  // pragma MARK: std::optional<TtiMeasurementValue>
   /**
-   * Specialized version of `std::optional<std::function<void(const TtiMeasurementValue& / * measurement * /)>>`.
+   * Specialized version of `std::optional<TtiMeasurementValue>`.
    */
-  using std__optional_std__function_void_const_TtiMeasurementValue_____measurement______ = std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>;
-  inline std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>> create_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(const std::function<void(const TtiMeasurementValue& /* measurement */)>& value) noexcept {
-    return std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>(value);
+  using std__optional_TtiMeasurementValue_ = std::optional<TtiMeasurementValue>;
+  inline std::optional<TtiMeasurementValue> create_std__optional_TtiMeasurementValue_(const TtiMeasurementValue& value) noexcept {
+    return std::optional<TtiMeasurementValue>(value);
   }
-  inline bool has_value_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& optional) noexcept {
+  inline bool has_value_std__optional_TtiMeasurementValue_(const std::optional<TtiMeasurementValue>& optional) noexcept {
     return optional.has_value();
   }
-  inline std::function<void(const TtiMeasurementValue& /* measurement */)> get_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& optional) noexcept {
+  inline TtiMeasurementValue get_std__optional_TtiMeasurementValue_(const std::optional<TtiMeasurementValue>& optional) noexcept {
     return *optional;
   }
   
@@ -251,6 +251,39 @@ namespace margelo::nitro::utils::bridge::swift {
   }
   inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
     return Result<void>::withError(error);
+  }
+  
+  // pragma MARK: Result<double>
+  using Result_double_ = Result<double>;
+  inline Result_double_ create_Result_double_(double value) noexcept {
+    return Result<double>::withValue(std::move(value));
+  }
+  inline Result_double_ create_Result_double_(const std::exception_ptr& error) noexcept {
+    return Result<double>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::optional<TtiMeasurementValue>>
+  using Result_std__optional_TtiMeasurementValue__ = Result<std::optional<TtiMeasurementValue>>;
+  inline Result_std__optional_TtiMeasurementValue__ create_Result_std__optional_TtiMeasurementValue__(const std::optional<TtiMeasurementValue>& value) noexcept {
+    return Result<std::optional<TtiMeasurementValue>>::withValue(value);
+  }
+  inline Result_std__optional_TtiMeasurementValue__ create_Result_std__optional_TtiMeasurementValue__(const std::exception_ptr& error) noexcept {
+    return Result<std::optional<TtiMeasurementValue>>::withError(error);
+  }
+  
+  // pragma MARK: std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(const TtiMeasurementValue& / * measurement * /)>>`.
+   */
+  using std__optional_std__function_void_const_TtiMeasurementValue_____measurement______ = std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>;
+  inline std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>> create_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(const std::function<void(const TtiMeasurementValue& /* measurement */)>& value) noexcept {
+    return std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(const TtiMeasurementValue& /* measurement */)> get_std__optional_std__function_void_const_TtiMeasurementValue_____measurement______(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& optional) noexcept {
+    return *optional;
   }
   
   // pragma MARK: std::shared_ptr<HybridTtiMeasurementViewSpec>

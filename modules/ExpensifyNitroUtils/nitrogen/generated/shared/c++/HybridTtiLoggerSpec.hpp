@@ -55,7 +55,9 @@ namespace margelo::nitro::utils {
     public:
       // Methods
       virtual void mark(TtiMeasurementName name, double timestamp) = 0;
-      virtual void setOnMeasurementsReadyListener(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& onMeasurementsReadyListener) = 0;
+      virtual double addMeasurementsReadyListener(const std::function<void(const TtiMeasurementValue& /* measurement */)>& onMeasurementsReadyListener) = 0;
+      virtual void removeMeasurementsReadyListener(double listenerId) = 0;
+      virtual std::optional<TtiMeasurementValue> getMeasurements() = 0;
 
     protected:
       // Hybrid Setup

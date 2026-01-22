@@ -15,7 +15,9 @@ namespace margelo::nitro::utils {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("mark", &HybridTtiLoggerSpec::mark);
-      prototype.registerHybridMethod("setOnMeasurementsReadyListener", &HybridTtiLoggerSpec::setOnMeasurementsReadyListener);
+      prototype.registerHybridMethod("addMeasurementsReadyListener", &HybridTtiLoggerSpec::addMeasurementsReadyListener);
+      prototype.registerHybridMethod("removeMeasurementsReadyListener", &HybridTtiLoggerSpec::removeMeasurementsReadyListener);
+      prototype.registerHybridMethod("getMeasurements", &HybridTtiLoggerSpec::getMeasurements);
     });
   }
 

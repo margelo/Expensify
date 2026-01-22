@@ -7,18 +7,18 @@
 
 #include "JHybridTtiLoggerSpec.hpp"
 
-// Forward declaration of `TtiMeasurementName` to properly resolve imports.
-namespace margelo::nitro::utils { enum class TtiMeasurementName; }
 // Forward declaration of `TtiMeasurementValue` to properly resolve imports.
 namespace margelo::nitro::utils { struct TtiMeasurementValue; }
+// Forward declaration of `TtiMeasurementName` to properly resolve imports.
+namespace margelo::nitro::utils { enum class TtiMeasurementName; }
 
+#include "TtiMeasurementValue.hpp"
+#include <optional>
+#include "JTtiMeasurementValue.hpp"
 #include "TtiMeasurementName.hpp"
 #include "JTtiMeasurementName.hpp"
-#include "TtiMeasurementValue.hpp"
 #include <functional>
-#include <optional>
 #include "JFunc_void_TtiMeasurementValue.hpp"
-#include "JTtiMeasurementValue.hpp"
 
 namespace margelo::nitro::utils {
 
@@ -56,9 +56,19 @@ namespace margelo::nitro::utils {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JTtiMeasurementName> /* name */, double /* timestamp */)>("mark");
     method(_javaPart, JTtiMeasurementName::fromCpp(name), timestamp);
   }
-  void JHybridTtiLoggerSpec::setOnMeasurementsReadyListener(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& onMeasurementsReadyListener) {
-    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_TtiMeasurementValue::javaobject> /* onMeasurementsReadyListener */)>("setOnMeasurementsReadyListener_cxx");
-    method(_javaPart, onMeasurementsReadyListener.has_value() ? JFunc_void_TtiMeasurementValue_cxx::fromCpp(onMeasurementsReadyListener.value()) : nullptr);
+  double JHybridTtiLoggerSpec::addMeasurementsReadyListener(const std::function<void(const TtiMeasurementValue& /* measurement */)>& onMeasurementsReadyListener) {
+    static const auto method = javaClassStatic()->getMethod<double(jni::alias_ref<JFunc_void_TtiMeasurementValue::javaobject> /* onMeasurementsReadyListener */)>("addMeasurementsReadyListener_cxx");
+    auto __result = method(_javaPart, JFunc_void_TtiMeasurementValue_cxx::fromCpp(onMeasurementsReadyListener));
+    return __result;
+  }
+  void JHybridTtiLoggerSpec::removeMeasurementsReadyListener(double listenerId) {
+    static const auto method = javaClassStatic()->getMethod<void(double /* listenerId */)>("removeMeasurementsReadyListener");
+    method(_javaPart, listenerId);
+  }
+  std::optional<TtiMeasurementValue> JHybridTtiLoggerSpec::getMeasurements() {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JTtiMeasurementValue>()>("getMeasurements");
+    auto __result = method(_javaPart);
+    return __result != nullptr ? std::make_optional(__result->toCpp()) : std::nullopt;
   }
 
 } // namespace margelo::nitro::utils

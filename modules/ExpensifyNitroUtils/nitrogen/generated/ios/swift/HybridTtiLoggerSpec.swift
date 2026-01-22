@@ -15,7 +15,9 @@ public protocol HybridTtiLoggerSpec_protocol: HybridObject {
 
   // Methods
   func mark(name: TtiMeasurementName, timestamp: Double) throws -> Void
-  func setOnMeasurementsReadyListener(onMeasurementsReadyListener: ((_ measurement: TtiMeasurementValue) -> Void)?) throws -> Void
+  func addMeasurementsReadyListener(onMeasurementsReadyListener: @escaping (_ measurement: TtiMeasurementValue) -> Void) throws -> Double
+  func removeMeasurementsReadyListener(listenerId: Double) throws -> Void
+  func getMeasurements() throws -> TtiMeasurementValue?
 }
 
 public extension HybridTtiLoggerSpec_protocol {

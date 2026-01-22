@@ -55,7 +55,9 @@ namespace margelo::nitro::utils {
   public:
     // Methods
     void mark(TtiMeasurementName name, double timestamp) override;
-    void setOnMeasurementsReadyListener(const std::optional<std::function<void(const TtiMeasurementValue& /* measurement */)>>& onMeasurementsReadyListener) override;
+    double addMeasurementsReadyListener(const std::function<void(const TtiMeasurementValue& /* measurement */)>& onMeasurementsReadyListener) override;
+    void removeMeasurementsReadyListener(double listenerId) override;
+    std::optional<TtiMeasurementValue> getMeasurements() override;
 
   private:
     friend HybridBase;
