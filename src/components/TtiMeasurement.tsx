@@ -65,18 +65,7 @@ function TtiMeasurement() {
         };
     }, [basedOnStartup]);
 
-    console.log('[PERFORMANCE_METRICS] ttiMeasurement', ttiMeasurement);
-
     const firstDrawTime = basedOnStartup(ttiMeasurement?.firstDraw);
-
-    const onMeasurementsReady = (measurement: TtiMeasurementValue) => {
-        console.log(`[PERFORMANCE_METRICS] onMeasurementsReady ${JSON.stringify(measurement)}`);
-        setTtiMeasurement(measurement);
-    };
-
-    useEffect(() => {
-        console.log('[PERFORMANCE_METRICS] test log');
-    }, []);
 
     if (!IS_TTI_MEASURMENT_ENABLED) {
         return null;
@@ -84,7 +73,7 @@ function TtiMeasurement() {
 
     return (
         <>
-            <TtiMeasurementView onMeasurementsReady={onMeasurementsReady} />
+            <TtiMeasurementView onMeasurementsReady={setTtiMeasurement} />
             {!!ttiMeasurement && (
                 <View
                     pointerEvents="none"

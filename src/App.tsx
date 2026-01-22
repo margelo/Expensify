@@ -80,11 +80,11 @@ function App() {
     //     Performance.mark(CONST.PERFORMANCE.MARKERS.TTI_REACHED);
     // }, []);
 
-    useEffect(() => {
-        setTimeout(() => {
-            stopProfiling(true);
-        }, 10000);
-    }, []);
+    // useEffect(() => {
+    //     setTimeout(() => {
+    //         stopProfiling(true);
+    //     }, 10000);
+    // }, []);
 
     return (
         <StrictModeWrapper>

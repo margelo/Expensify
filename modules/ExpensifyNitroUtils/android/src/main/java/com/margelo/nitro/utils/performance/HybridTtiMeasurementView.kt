@@ -47,8 +47,6 @@ class HybridTtiMeasurementView(val context: ThemedReactContext) : HybridTtiMeasu
             val newFirstDrawTimestamp = TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
             firstDrawTimestamp = newFirstDrawTimestamp
 
-            Log.d("PERFORMANCE_METRICS", "firstDrawTimestamp $newFirstDrawTimestamp")
-
             HybridTtiLogger.mark(TtiMeasurementName.FIRSTDRAW, newFirstDrawTimestamp.toDouble())
         }
     }

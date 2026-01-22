@@ -46,7 +46,7 @@ if [[ "$IS_HYBRID_APP_REPO" == "true" && "$NEW_DOT_FLAG" == "false" ]]; then
     IOS_MODE="Debug"
     ANDROID_MODE="release"
     SCHEME="Expensify Dev"
-    APP_ID="org.me.mobiexpensifyg.dev"
+    APP_ID="org.me.mobiexpensifyg"
 
     # Build Yapl JS
     cd Mobile-Expensify && npm run grunt:build:shared && cd ..
@@ -82,7 +82,7 @@ case "$BUILD" in
             fi
         fi
 
-        SENTRY_DISABLE_AUTO_UPLOAD=true npx rock run:android --local --device R9WW40GQ67E --variant $ANDROID_MODE --app-id $APP_ID --active-arch-only --verbose --dev-server "${ROCK_FLAGS[@]}"
+        SENTRY_DISABLE_AUTO_UPLOAD=true npx rock run:android --local --device R9WW40GQ67E --variant $ANDROID_MODE --app-id $APP_ID --active-arch-only --verbose "${ROCK_FLAGS[@]}"
         ;;
     *)
         print_error_and_exit

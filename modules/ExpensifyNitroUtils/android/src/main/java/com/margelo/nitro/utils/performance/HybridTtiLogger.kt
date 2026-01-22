@@ -15,6 +15,16 @@ class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
         var bundleExecutionTimestamp: Double? = null
         var firstDrawTimestamp: Double? = null
 
+        fun reset() {
+            applicationStartupTimestamp = null
+            bundleExecutionTimestamp = null
+            firstDrawTimestamp = null
+
+            lastListenerId = 0.0
+            measurementListeners.clear()
+            invokedListeners.clear()
+        }
+
         fun mark(name: TtiMeasurementName, timestamp: Double): Unit {
             when (name) {
                 TtiMeasurementName.APPLICATIONSTARTUP -> applicationStartupTimestamp = applicationStartupTimestamp ?: timestamp
@@ -26,8 +36,6 @@ class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
                 return
             }
 
-            Log.d("PERFORMANCE_METRICS", "invoke after mark");
-
             invokeListeners(measurementListeners)
         }
 
@@ -35,7 +43,6 @@ class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
             if (applicationStartupTimestamp == null || firstDrawTimestamp == null) {
                 return null
             }
-
 
             return TtiMeasurementValue(
                 applicationStartup = applicationStartupTimestamp!!,
@@ -45,24 +52,12 @@ class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
         }
 
         fun invokeListeners(listeners: Map<Double, OnMeasurementsReadyListener>) {
-            if (applicationStartupTimestamp == null || firstDrawTimestamp == null) {
-                return
-            }
-
-            val applicationTimestampString = applicationStartupTimestamp!!.toBigDecimal().toPlainString()
-            val firstDrawTimestampString = firstDrawTimestamp!!.toBigDecimal().toPlainString()
-
-            Log.d("PERFORMANCE_METRICS", "invoke $applicationTimestampString $firstDrawTimestampString")
-
+            val measurements = getMeasurements() ?: return
             for ((id, listener) in listeners) {
                 if (invokedListeners.contains(id)) continue
                 invokedListeners.add(id)
 
-                listener.invoke(TtiMeasurementValue(
-                    applicationStartup = applicationStartupTimestamp!!,
-                    firstDraw = firstDrawTimestamp!!,
-                    bundleExecution = bundleExecutionTimestamp ?: 0.0
-                ))
+                listener.invoke(measurements)
             }
         }
 
@@ -75,10 +70,10 @@ class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
             }
         }
 
-        fun addMeasurementsReadyListener(listener: OnMeasurementsReadyListener): Double {
+        fun addMeasurementsReadyListener(onMeasurementsReadyListener: OnMeasurementsReadyListener): Double {
             val listenerId = ++lastListenerId
-            measurementListeners[listenerId] = listener
-            invokeListeners(mapOf(listenerId to listener))
+            measurementListeners[listenerId] = onMeasurementsReadyListener
+            invokeListeners(mapOf(listenerId to onMeasurementsReadyListener))
             return listenerId
         }
 
@@ -92,8 +87,8 @@ class HybridTtiLogger(val context: ThemedReactContext) : HybridTtiLoggerSpec() {
         HybridTtiLogger.mark(name, timestamp);
     }
 
-    override fun addMeasurementsReadyListener(listener: OnMeasurementsReadyListener): Double {
-        return HybridTtiLogger.addMeasurementsReadyListener(listener);
+    override fun addMeasurementsReadyListener(onMeasurementsReadyListener: OnMeasurementsReadyListener): Double {
+        return HybridTtiLogger.addMeasurementsReadyListener(onMeasurementsReadyListener);
     }
 
     override fun removeMeasurementsReadyListener(listenerId: Double) {

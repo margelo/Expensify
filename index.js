@@ -10,7 +10,7 @@ import Config from './src/CONFIG';
 import additionalAppSetup from './src/setup';
 
 
-startProfiling();
+// startProfiling();
 
 // Define EXPO_OS before any imports to prevent console errors from Expo DOM components
 if (!process.env.EXPO_OS && __DEV__) {

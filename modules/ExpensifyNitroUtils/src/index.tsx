@@ -16,16 +16,11 @@ type TtiMeasurementViewProps = Omit<TtiMeasurementViewPropsInternal, 'ttiLogger'
 };
 
 function TtiMeasurementView({onMeasurementsReady, ...restProps}: TtiMeasurementViewProps) {
-    const onMeasurementsReadyCallback = (measurements: TtiMeasurementValue) => {
-        console.log(`[PERFORMANCE_METRICS] TTILogger callback set ${JSON.stringify(measurements)}`);
-        onMeasurementsReady?.(measurements);
-    };
-
     return (
         <TtiMeasurementViewImplementation
             // eslint-disable-next-line react/jsx-props-no-spreading
             {...restProps}
-            onMeasurementsReady={callback(onMeasurementsReadyCallback)}
+            onMeasurementsReady={callback(onMeasurementsReady)}
         />
     );
 }
