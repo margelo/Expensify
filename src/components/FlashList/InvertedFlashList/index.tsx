@@ -1,10 +1,11 @@
-import type {FlashListProps} from '@shopify/flash-list';
+import type {LegendListProps} from '@legendapp/list/react-native';
+import {LegendList} from '@legendapp/list/react-native';
 import React from 'react';
-import type {FlashListRefType, FlatListRefType} from '@pages/inbox/ReportScreenContext';
-import FlashList from '..';
-import CellRendererComponent from './CellRendererComponent';
+import type {LegendListRefType} from '@pages/inbox/ReportScreenContext';
 
-type InvertedFlashListProps<T> = FlashListProps<T> & {
+// import CellRendererComponent from './CellRendererComponent';
+
+type InvertedFlashListProps<T> = LegendListProps<T> & {
     /** The array of items to render in the list. */
     data: T[];
 
@@ -12,7 +13,7 @@ type InvertedFlashListProps<T> = FlashListProps<T> & {
     initialScrollKey?: string | null;
 
     /** Ref to the underlying list instance. */
-    ref: FlashListRefType<T> | FlatListRefType<T> | null;
+    ref: LegendListRefType | null;
 };
 
 function InvertedFlashList<T>({data, keyExtractor, initialScrollKey, initialScrollIndex: initialScrollIndexProp, ...restProps}: InvertedFlashListProps<T>) {
@@ -21,13 +22,12 @@ function InvertedFlashList<T>({data, keyExtractor, initialScrollKey, initialScro
     const initialScrollIndex = initialScrollIndexProp ?? initialScrollIndexForKey;
 
     return (
-        <FlashList<T>
+        <LegendList<T>
             {...restProps}
-            inverted
             data={data}
             keyExtractor={keyExtractor}
-            initialScrollIndex={initialScrollIndex}
-            CellRendererComponent={CellRendererComponent}
+            initialScrollIndex={initialScrollIndex ? {index: initialScrollIndex as number, viewPosition: 0.5} : undefined}
+            // CellRendererComponent={CellRendererComponent}
         />
     );
 }

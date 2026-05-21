@@ -1,3 +1,4 @@
+import type {LegendListRef} from '@legendapp/list/react-native';
 import type {FlashListRef} from '@shopify/flash-list';
 import type {RefObject, SyntheticEvent} from 'react';
 import {createContext} from 'react';
@@ -18,6 +19,8 @@ type ReactionListContextType = {
 type FlatListRefType<T = unknown> = RefObject<FlatList<T> | null> | null;
 
 type FlashListRefType<T = unknown> = RefObject<FlashListRef<T> | null> | null;
+
+type LegendListRefType = RefObject<LegendListRef | null> | null;
 type ScrollPosition = {offset?: number};
 
 type ActionListContextType = {
@@ -34,4 +37,4 @@ const ReactionListContext = createContext<ReactionListContextType>({
 });
 
 export {ActionListContext, ReactionListContext};
-export type {ReactionListContextType, ActionListContextType, FlatListRefType, FlashListRefType, ReactionListAnchor, ReactionListEvent, ScrollPosition};
+export type {ReactionListContextType, ActionListContextType, FlatListRefType, FlashListRefType, ReactionListAnchor, ReactionListEvent, ScrollPosition, LegendListRefType};
