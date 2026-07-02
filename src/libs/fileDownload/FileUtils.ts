@@ -235,6 +235,114 @@ function truncateFileNameToSafeLengthOnAndroid({fileNameWithoutExtension, fileSu
 }
 
 /**
+ * Returns a POSIX file path from a file URI.
+ */
+function getCleanFilePath(path: string): string {
+    let decodedPath = path;
+    try {
+        decodedPath = decodeURI(path);
+    } catch {
+        decodedPath = path;
+    }
+
+    if (decodedPath.startsWith('file://')) {
+        return decodedPath.slice(7);
+    }
+
+    return decodedPath;
+}
+
+/**
+ * Derives a MIME type for a local file when the platform does not provide one.
+ */
+function getLocalFileMimeType(path: string, fileName: string, fileType: string): string {
+    if (fileType) {
+        return fileType;
+    }
+
+    const mimeTypeFromFileName = getMimeTypeFromUri(fileName);
+    if (mimeTypeFromFileName) {
+        return mimeTypeFromFileName;
+    }
+
+    const mimeTypeFromPath = getMimeTypeFromUri(path);
+    if (mimeTypeFromPath) {
+        return mimeTypeFromPath;
+    }
+
+    const {fileExtension} = splitExtensionFromFileName(fileName);
+    return getMimeType(fileExtension);
+}
+
+/**
+ * Creates a File instance from base64-encoded file contents.
+ */
+function createFileFromBase64(base64Data: string, fileName: string, mimeType: string, path: string): File {
+    const byteString = atob(base64Data);
+    const arrayBuffer = new ArrayBuffer(byteString.length);
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i);
+    }
+
+    const blob = new Blob([uint8Array], {type: mimeType});
+    const file = new File([blob], cleanFileName(fileName), {type: mimeType});
+    file.source = path;
+    // For some reason, the File object on iOS does not have a uri property
+    // so images aren't uploaded correctly to the backend
+    file.uri = path;
+
+    return file;
+}
+
+/**
+ * Reads a locally uploaded file using react-native-blob-util on native platforms.
+ */
+function readNativeFileAsync(path: string, fileName: string, onSuccess: (file: File) => void, onFailure: (error?: unknown) => void, fileType: string, resolve: (file?: File | void) => void) {
+    const cleanPath = getCleanFilePath(path);
+    const mimeType = getLocalFileMimeType(path, fileName, fileType);
+
+    ReactNativeBlobUtil.fs
+        .readFile(cleanPath, 'base64')
+        .then((base64Data: string) => {
+            const file = createFileFromBase64(base64Data, fileName, mimeType, path);
+            onSuccess(file);
+            resolve(file);
+        })
+        .catch((e) => {
+            console.debug('[FileUtils] Could not read uploaded file', e);
+            onFailure(e);
+            resolve();
+        });
+}
+
+/**
+ * Reads a locally uploaded file using fetch on web.
+ */
+function readWebFileAsync(path: string, fileName: string, onSuccess: (file: File) => void, onFailure: (error?: unknown) => void, fileType: string, resolve: (file?: File | void) => void) {
+    fetch(path)
+        .then((res) => {
+            if (!res.ok) {
+                throw Error(res.statusText);
+            }
+
+            return res.blob().then((blob) => {
+                const file = new File([blob], cleanFileName(fileName), {type: blob.type || fileType});
+                file.source = path;
+                file.uri = path;
+                onSuccess(file);
+                resolve(file);
+            });
+        })
+        .catch((e) => {
+            console.debug('[FileUtils] Could not read uploaded file', e);
+            onFailure(e);
+            resolve();
+        });
+}
+
+/**
  * Reads a locally uploaded file
  * @param path - the blob url of the locally uploaded file
  * @param fileName - name of the file to read
@@ -246,37 +354,14 @@ const readFileAsync: ReadFileAsync = (path, fileName, onSuccess, onFailure = () 
             onFailure('[FileUtils] Path not specified');
             return;
         }
-        fetch(path)
-            .then((res) => {
-                // For some reason, fetch is "Unable to read uploaded file"
-                // on Android even though the blob is returned, so we'll ignore
-                // in that case
-                if (!res.ok && Platform.OS !== 'android') {
-                    throw Error(res.statusText);
-                }
-                res.blob()
-                    .then((blob) => {
-                        // On Android devices, fetching blob for a file with name containing spaces fails to retrieve the type of file.
-                        // In this case, let us fallback on fileType provided by the caller of this function.
-                        const file = new File([blob], cleanFileName(fileName), {type: blob.type || fileType});
-                        file.source = path;
-                        // For some reason, the File object on iOS does not have a uri property
-                        // so images aren't uploaded correctly to the backend
-                        file.uri = path;
-                        onSuccess(file);
-                        resolve(file);
-                    })
-                    .catch((e) => {
-                        console.debug('[FileUtils] Could not read uploaded file', e);
-                        onFailure(e);
-                        resolve();
-                    });
-            })
-            .catch((e) => {
-                console.debug('[FileUtils] Could not read uploaded file', e);
-                onFailure(e);
-                resolve();
-            });
+
+        const isNativePlatform = getPlatform() === CONST.PLATFORM.ANDROID || getPlatform() === CONST.PLATFORM.IOS;
+        if (isNativePlatform) {
+            readNativeFileAsync(path, fileName, onSuccess, onFailure, fileType, resolve);
+            return;
+        }
+
+        readWebFileAsync(path, fileName, onSuccess, onFailure, fileType, resolve);
     });
 
 /**
