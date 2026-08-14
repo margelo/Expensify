@@ -1,0 +1,85 @@
+diff --git a/node_modules/@legendapp/list/keyboard.d.ts b/node_modules/@legendapp/list/keyboard.d.ts
+--- a/node_modules/@legendapp/list/keyboard.d.ts
++++ b/node_modules/@legendapp/list/keyboard.d.ts
+@@ -257,7 +257,11 @@ type LegendListRef = Omit<LegendListRef$1, "getAnimatableRef" | "getNativeScro
+     reportContentInset(inset?: Partial<Insets$1> | null): void;
+ };
+ 
+ type KeyboardChatScrollViewPropsUnique = Omit<KeyboardChatScrollViewProps, keyof ScrollViewProps | "inverted" | "ScrollViewComponent" | "blankSpace" | "extraContentPadding" | "onContentInsetChange" | "offset">;
++type KeyboardAwareScrollViewComponentProps = NonNullable<KeyboardChatScrollViewProps["ScrollViewComponent"]> extends React.ForwardRefExoticComponent<infer Props> ? Omit<Props, "ref"> & {
++    ref?: React.Ref<React.ElementRef<typeof ScrollViewComponent>>;
++} : never;
++type KeyboardAwareScrollViewComponent = (props: KeyboardAwareScrollViewComponentProps) => React.ReactElement | null;
+ type ScrollMessageToEndOptions = {
+     animated: boolean;
+     closeKeyboard: boolean;
+@@ -291,6 +295,7 @@ declare const KeyboardAwareLegendList: <ItemT>(props: Omit<AnimatedLegendListPro
+     anchoredEndSpace?: AnchoredEndSpaceConfig;
+     contentInsetEndAdjustment?: SharedValue<number>;
+     keyboardOffset?: number;
++    ScrollViewComponent?: KeyboardAwareScrollViewComponent;
+ } & React.RefAttributes<LegendListRef>) => React.ReactElement | null;
+ 
+ export { KeyboardAwareLegendList, useKeyboardChatComposerInset, useKeyboardScrollToEnd };
+diff --git a/node_modules/@legendapp/list/keyboard.js b/node_modules/@legendapp/list/keyboard.js
+--- a/node_modules/@legendapp/list/keyboard.js
++++ b/node_modules/@legendapp/list/keyboard.js
+@@ -91,6 +91,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+     freeze,
+     keyboardLiftBehavior,
+     keyboardOffset,
++    ScrollViewComponent,
+     ...rest
+   } = props;
+   const refLegendList = React.useRef(null);
+@@ -125,7 +126,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+           freeze,
+           keyboardLiftBehavior,
+           offset: keyboardOffset,
+-          onContentInsetChange
++          onContentInsetChange,
++          ScrollViewComponent
+         }
+       );
+     },
+@@ -137,7 +139,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+       freeze,
+       keyboardLiftBehavior,
+       keyboardOffset,
+-      onContentInsetChange
++      onContentInsetChange,
++      ScrollViewComponent
+     ]
+   );
+   const AnimatedLegendListInternal = reanimated.AnimatedLegendList;
+diff --git a/node_modules/@legendapp/list/keyboard.mjs b/node_modules/@legendapp/list/keyboard.mjs
+--- a/node_modules/@legendapp/list/keyboard.mjs
++++ b/node_modules/@legendapp/list/keyboard.mjs
+@@ -70,6 +70,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+     freeze,
+     keyboardLiftBehavior,
+     keyboardOffset,
++    ScrollViewComponent,
+     ...rest
+   } = props;
+   const refLegendList = useRef(null);
+@@ -104,7 +105,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+           freeze,
+           keyboardLiftBehavior,
+           offset: keyboardOffset,
+-          onContentInsetChange
++          onContentInsetChange,
++          ScrollViewComponent
+         }
+       );
+     },
+@@ -116,7 +118,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+       freeze,
+       keyboardLiftBehavior,
+       keyboardOffset,
+-      onContentInsetChange
++      onContentInsetChange,
++      ScrollViewComponent
+     ]
+   );
+   const AnimatedLegendListInternal = AnimatedLegendList;
