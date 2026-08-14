@@ -52,12 +52,12 @@ function isMvcpEnabled() {
     return config === true || (typeof config === 'object' && config.data);
 }
 
-jest.mock('@legendapp/list/react-native', () => {
+jest.mock('@legendapp/list/keyboard', () => {
     const {forwardRef} = jest.requireActual<typeof React>('react');
     return {
         // The second parameter is intentionally unused; forwardRef requires it to avoid a React development warning.
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        LegendList: forwardRef<unknown, CapturedListProps>((props, ref) => {
+        KeyboardAwareLegendList: forwardRef<unknown, CapturedListProps>((props, ref) => {
             capturedListProps = props;
             return null;
         }),

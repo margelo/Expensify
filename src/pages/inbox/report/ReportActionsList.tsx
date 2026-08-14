@@ -1,4 +1,4 @@
-import {renderScrollComponent as renderActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
+import {ActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
 import type {ActionListRef} from '@components/FlashList/types';
 import allowLegendListItemOverflow from '@components/LegendList/allowLegendListItemOverflow';
 import MerchantRuleSuggestionBanner from '@components/MerchantRuleSuggestionBanner';
@@ -62,7 +62,7 @@ import type {LegendListRef, LegendListRenderItemProps, OnViewableItemsChangedInf
 import type {LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent} from 'react-native';
 import type {OnyxEntry} from 'react-native-onyx';
 
-import {LegendList} from '@legendapp/list/react-native';
+import {KeyboardAwareLegendList} from '@legendapp/list/keyboard';
 import {useRoute} from '@react-navigation/native';
 import {isTrackIntentUserSelector} from '@selectors/Onboarding';
 import React, {useEffect, useImperativeHandle, useRef, useState} from 'react';
@@ -626,7 +626,8 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
                     onLayout={handleViewportLayout}
                 >
                     {viewportHeight > 0 ? (
-                        <LegendList
+                        <KeyboardAwareLegendList
+                            ScrollViewComponent={ActionSheetAwareScrollView}
                             accessibilityLabel={translate('sidebarScreen.listOfChatMessages')}
                             ref={legendListRef}
                             testID="report-actions-list"
@@ -637,7 +638,6 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
                             drawDistance={REPORT_ACTIONS_DRAW_DISTANCE}
                             recycleItems
                             experimental_hideItemsUntilMeasured
-                            renderScrollComponent={renderActionSheetAwareScrollView}
                             contentContainerStyle={styles.chatContentScrollView}
                             ListHeaderComponent={olderListHeaderComponent}
                             ListFooterComponent={newerListFooterComponent}

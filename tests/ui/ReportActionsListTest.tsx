@@ -2,6 +2,8 @@ import {act, fireEvent, render, screen} from '@testing-library/react-native';
 
 import allowLegendListItemOverflow from '@components/LegendList/allowLegendListItemOverflow';
 
+import {ActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
+
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import {useIsReportLoadPending} from '@hooks/useInFlightRequests';
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion */
@@ -161,10 +163,10 @@ const mockUseCurrentUserPersonalDetails = useCurrentUserPersonalDetails as jest.
 const mockLegendListMount = jest.fn();
 const mockLegendListUnmount = jest.fn();
 let mockShouldCallLegendListOnLoad = true;
-jest.mock('@legendapp/list/react-native', () => {
+jest.mock('@legendapp/list/keyboard', () => {
     const reactModule = jest.requireActual<typeof React>('react');
     return {
-        LegendList: jest.fn(({onLoad}: {onLoad?: () => void}) => {
+        KeyboardAwareLegendList: jest.fn(({onLoad}: {onLoad?: () => void}) => {
             reactModule.useEffect(() => {
                 mockLegendListMount();
                 if (mockShouldCallLegendListOnLoad) {
@@ -226,6 +228,7 @@ type MockLegendListProps = {
     onContentSizeChange?: (width: number, height: number) => void;
     onViewableItemsChanged?: (info: OnViewableItemsChangedInfo<OnyxTypes.ReportAction>) => void;
     recycleItems?: boolean;
+    ScrollViewComponent?: unknown;
     renderItem?: (info: {item: OnyxTypes.ReportAction; index: number}) => React.ReactElement | null;
     onStartReached?: () => void;
     onScroll?: (event: {
@@ -239,7 +242,9 @@ type MockLegendListProps = {
 
 type PaginationLoadingIndicatorProps = React.ComponentProps<typeof ReportActionsPaginationLoadingIndicator>;
 
-const {LegendList: mockLegendList} = jest.requireMock<{LegendList: jest.MockedFunction<(props: MockLegendListProps) => null>}>('@legendapp/list/react-native');
+const {KeyboardAwareLegendList: mockLegendList} = jest.requireMock<{
+    KeyboardAwareLegendList: jest.MockedFunction<(props: MockLegendListProps) => null>;
+}>('@legendapp/list/keyboard');
 const mockReportActionItemCreated: jest.Mock = jest.requireMock('@pages/inbox/report/ReportActionItemCreated');
 
 /** Returns the chronological report actions the body fed into the mocked LegendList on its latest render. */
@@ -615,6 +620,13 @@ describe('ReportActionsList (body)', () => {
 
         expect(getCapturedVisibleActions()).toHaveLength(mockReportActions.length + 1);
         expect(getCapturedVisibleActions()?.some((action) => action.reportActionID === olderMockReportAction.reportActionID)).toBe(true);
+    });
+
+    it('uses the action-sheet-aware scroll view inside the keyboard-aware list', () => {
+        mockUseNetwork.mockReturnValue({isOffline: false});
+        renderReportActionsList();
+
+        expect(getCapturedListProps()?.ScrollViewComponent).toBe(ActionSheetAwareScrollView);
     });
 
     it('limits the render buffer and enables item recycling', () => {
