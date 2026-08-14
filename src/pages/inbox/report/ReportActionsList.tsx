@@ -17,6 +17,7 @@ import useReportActionsPaginationScroll from '@hooks/useReportActionsPaginationS
 import useReportActionsScroll from '@hooks/useReportActionsScroll';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useRetireMerchantRuleSuggestionOnLeave from '@hooks/useRetireMerchantRuleSuggestionOnLeave';
+import useSafeAreaPaddings from '@hooks/useSafeAreaPaddings';
 import useThemeStyles from '@hooks/useThemeStyles';
 import useUnreadMarker from '@hooks/useUnreadMarker';
 
@@ -154,6 +155,7 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
     const styles = useThemeStyles();
     const {translate} = useLocalize();
     const {shouldUseNarrowLayout} = useResponsiveLayout();
+    const safeAreaPaddings = useSafeAreaPaddings();
     const {isProduction} = useEnvironment();
 
     const {
@@ -628,6 +630,10 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
                     {viewportHeight > 0 ? (
                         <KeyboardAwareLegendList
                             ScrollViewComponent={ActionSheetAwareScrollView}
+                            keyboardOffset={safeAreaPaddings.paddingBottom}
+                            automaticallyAdjustContentInsets={false}
+                            contentInsetAdjustmentBehavior="never"
+                            keyboardDismissMode="interactive"
                             accessibilityLabel={translate('sidebarScreen.listOfChatMessages')}
                             ref={legendListRef}
                             testID="report-actions-list"

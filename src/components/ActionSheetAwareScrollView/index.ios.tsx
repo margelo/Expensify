@@ -6,7 +6,6 @@ import type {ActionSheetAwareScrollViewProps, RenderActionSheetAwareScrollViewCo
 import {Actions, ActionSheetAwareScrollViewProvider, useActionSheetAwareScrollViewActions, useActionSheetAwareScrollViewState} from './ActionSheetAwareScrollViewContext';
 import useActionSheetAwareScrollViewRef from './useActionSheetAwareScrollViewRef';
 import useActionSheetKeyboardSpacing from './useActionSheetKeyboardSpacing';
-import usePreventScrollOnKeyboardInteraction from './usePreventScrollOnKeyboardInteraction';
 
 function ActionSheetAwareScrollView({style, children, ref, ...restProps}: ActionSheetAwareScrollViewProps) {
     const {onRef, animatedRef} = useActionSheetAwareScrollViewRef(ref);
@@ -15,8 +14,6 @@ function ActionSheetAwareScrollView({style, children, ref, ...restProps}: Action
     const animatedStyle = useAnimatedStyle(() => ({
         paddingTop: spacing.get(),
     }));
-
-    usePreventScrollOnKeyboardInteraction({scrollViewRef: animatedRef});
 
     return (
         <Reanimated.ScrollView

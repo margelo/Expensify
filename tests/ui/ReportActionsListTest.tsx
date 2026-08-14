@@ -200,10 +200,6 @@ jest.mock('@hooks/useReportActionsScroll', () =>
     })),
 );
 jest.mock('@pages/inbox/report/FloatingMessageCounter', () => jest.fn(() => null));
-jest.mock('@pages/inbox/report/ReportActionsListPaddingView', () => {
-    const reactModule = jest.requireActual<typeof React>('react');
-    return jest.fn(({children}: {children: React.ReactNode}) => reactModule.createElement(reactModule.Fragment, null, children));
-});
 jest.mock('@pages/inbox/report/UserTypingEventListener', () => jest.fn(() => null));
 jest.mock('@pages/inbox/report/ReportActionItemCreated', () => jest.fn(() => null));
 
@@ -228,6 +224,7 @@ type MockLegendListProps = {
     onContentSizeChange?: (width: number, height: number) => void;
     onViewableItemsChanged?: (info: OnViewableItemsChangedInfo<OnyxTypes.ReportAction>) => void;
     recycleItems?: boolean;
+    keyboardOffset?: number;
     ScrollViewComponent?: unknown;
     renderItem?: (info: {item: OnyxTypes.ReportAction; index: number}) => React.ReactElement | null;
     onStartReached?: () => void;
@@ -622,11 +619,12 @@ describe('ReportActionsList (body)', () => {
         expect(getCapturedVisibleActions()?.some((action) => action.reportActionID === olderMockReportAction.reportActionID)).toBe(true);
     });
 
-    it('uses the action-sheet-aware scroll view inside the keyboard-aware list', () => {
+    it('uses the action-sheet-aware scroll view and safe-area keyboard offset inside the keyboard-aware list', () => {
         mockUseNetwork.mockReturnValue({isOffline: false});
         renderReportActionsList();
 
         expect(getCapturedListProps()?.ScrollViewComponent).toBe(ActionSheetAwareScrollView);
+        expect(getCapturedListProps()?.keyboardOffset).toEqual(expect.any(Number));
     });
 
     it('limits the render buffer and enables item recycling', () => {

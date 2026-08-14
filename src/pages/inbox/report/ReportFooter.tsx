@@ -4,8 +4,8 @@ import Banner from '@components/Banner';
 import BlockedReportFooter from '@components/BlockedReportFooter';
 import MerchantRuleSuggestionBanner from '@components/MerchantRuleSuggestionBanner';
 import OfflineIndicator from '@components/OfflineIndicator';
-import SwipeableView from '@components/SwipeableView';
 
+import useBottomSafeSafeAreaPaddingStyle from '@hooks/useBottomSafeSafeAreaPaddingStyle';
 import {useIsReportLoadPending} from '@hooks/useInFlightRequests';
 import useIsAnonymousUser from '@hooks/useIsAnonymousUser';
 import useIsReportReadyToDisplay from '@hooks/useIsReportReadyToDisplay';
@@ -36,7 +36,7 @@ import type {OnyxEntry} from 'react-native-onyx';
 import {useRoute} from '@react-navigation/native';
 import {isBlockedFromChatSelector} from '@selectors/BlockedFromChat';
 import React from 'react';
-import {Keyboard, View} from 'react-native';
+import {View} from 'react-native';
 
 import EnableNotificationsBanner, {BANNER_COMPOSER_OVERLAP_PX} from './EnableNotificationsBanner';
 import ReportActionCompose from './ReportActionCompose/ReportActionCompose';
@@ -53,6 +53,17 @@ const composerOverlapStyle = {marginTop: -BANNER_COMPOSER_OVERLAP_PX};
  * archived/anonymous/blocked/system chat/admins-only footer.
  */
 function ReportFooter() {
+    const styles = useThemeStyles();
+    const bottomSafeAreaPaddingStyle = useBottomSafeSafeAreaPaddingStyle({addBottomSafeAreaPadding: true, addOfflineIndicatorBottomSafeAreaPadding: false});
+
+    return (
+        <View style={[styles.chatFooter, bottomSafeAreaPaddingStyle]}>
+            <ReportFooterVariants />
+        </View>
+    );
+}
+
+function ReportFooterVariants() {
     const route = useRoute();
     const routeParams = route.params as {reportID?: string} | undefined;
     const reportIDFromRoute = getNonEmptyStringOnyxID(routeParams?.reportID);
@@ -98,15 +109,9 @@ function ReportFooter() {
         return null;
     }
 
-    const chatFooterStyles = {...styles.chatFooter, minHeight: !isOffline ? CONST.CHAT_FOOTER_MIN_HEIGHT : 0};
-
     // Happy path — user can compose
     if (!shouldHideComposer) {
-        const composer = (
-            <SwipeableView onSwipeDown={Keyboard.dismiss}>
-                <ReportActionCompose reportID={reportIDFromRoute} />
-            </SwipeableView>
-        );
+        const composer = <ReportActionCompose reportID={reportIDFromRoute} />;
         // The callout decides for itself whether this mount suits the layout and the composer size.
         const merchantRuleBanner = (
             <MerchantRuleSuggestionBanner
@@ -118,7 +123,7 @@ function ReportFooter() {
             />
         );
         return (
-            <View style={[chatFooterStyles, isComposerFullSize && styles.chatFooterFullCompose]}>
+            <View style={[{minHeight: !isOffline ? CONST.CHAT_FOOTER_MIN_HEIGHT : 0}, isComposerFullSize && styles.chatFooterFullCompose]}>
                 {merchantRuleBanner}
                 {shouldShowEnableNotificationsBanner ? (
                     <>
@@ -135,7 +140,7 @@ function ReportFooter() {
     // Archived room
     if (isArchivedRoom) {
         return (
-            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <ArchivedReportFooter reportID={reportIDFromRoute} />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -149,7 +154,7 @@ function ReportFooter() {
     // Anonymous user
     if (isAnonymousUser) {
         return (
-            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <AnonymousReportFooter reportID={reportIDFromRoute} />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -163,7 +168,7 @@ function ReportFooter() {
     // Blocked from chat
     if (isBlockedFromChat) {
         return (
-            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <BlockedReportFooter />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -177,7 +182,7 @@ function ReportFooter() {
     // System chat where user can't write
     if (!canWriteInReport && isSystemChat) {
         return (
-            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <SystemChatReportFooterMessage />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -193,12 +198,10 @@ function ReportFooter() {
         const isEditingWithComposer = shouldShowComposerForActiveEditDraft;
 
         return (
-            <View style={[styles.chatFooter, !isEditingWithComposer && styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[!isEditingWithComposer && styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 {isEditingWithComposer && (
                     <View style={[isComposerFullSize ? styles.chatFooterFullCompose : undefined, styles.mb2]}>
-                        <SwipeableView onSwipeDown={Keyboard.dismiss}>
-                            <ReportActionCompose.EditOnly reportID={reportIDFromRoute} />
-                        </SwipeableView>
+                        <ReportActionCompose.EditOnly reportID={reportIDFromRoute} />
                     </View>
                 )}
                 <Banner
@@ -224,7 +227,7 @@ function ReportFooter() {
     // indicators keep priority.
     if (!canWriteInReport) {
         return (
-            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <Banner
                     containerStyles={[styles.chatFooterBanner]}
                     text={translate('readOnlyConversation')}
