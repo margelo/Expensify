@@ -1,4 +1,4 @@
-import {renderScrollComponent as renderActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
+import {ActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
 import type {ActionListRef} from '@components/FlashList/types';
 import ReportActionsSkeletonView from '@components/ReportActionsSkeletonView';
 
@@ -58,7 +58,7 @@ import type {LegendListRef, LegendListRenderItemProps} from '@legendapp/list/rea
 import type {LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent} from 'react-native';
 import type {OnyxEntry} from 'react-native-onyx';
 
-import {LegendList} from '@legendapp/list/react-native';
+import {KeyboardAwareLegendList} from '@legendapp/list/keyboard';
 import {useRoute} from '@react-navigation/native';
 import {isTrackIntentUserSelector} from '@selectors/Onboarding';
 import React, {useEffect, useImperativeHandle, useRef, useState} from 'react';
@@ -503,7 +503,8 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListContent
                 report={report}
                 isReportArchived={isReportArchived}
             >
-                <LegendList
+                <KeyboardAwareLegendList
+                    ScrollViewComponent={ActionSheetAwareScrollView}
                     accessibilityLabel={translate('sidebarScreen.listOfChatMessages')}
                     ref={legendListRef}
                     testID="report-actions-list"
@@ -512,7 +513,6 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListContent
                     renderItem={renderItem}
                     keyExtractor={keyExtractor}
                     drawDistance={1500}
-                    renderScrollComponent={renderActionSheetAwareScrollView}
                     contentContainerStyle={styles.chatContentScrollView}
                     onStartReached={loadOlderChatsOnStartReached}
                     onStartReachedThreshold={PAGINATION_THRESHOLD}

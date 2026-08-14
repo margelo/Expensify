@@ -1,8 +1,8 @@
 import type {ActionWithPayload, State} from '@hooks/useWorkletStateMachine';
 
-import type {Ref} from 'react';
+import type {ComponentProps, Ref} from 'react';
 // eslint-disable-next-line no-restricted-imports
-import type {ScrollView, ScrollViewProps} from 'react-native';
+import type {ScrollView, ScrollViewComponent} from 'react-native';
 import type Reanimated from 'react-native-reanimated';
 import type {SharedValue} from 'react-native-reanimated';
 
@@ -27,13 +27,13 @@ type ActionSheetAwareScrollViewActionsContextValue = {
 
 type ActionSheetAwareScrollViewContextValue = ActionSheetAwareScrollViewStateContextValue & ActionSheetAwareScrollViewActionsContextValue;
 
-type ActionSheetAwareScrollViewHandle = ScrollView | Reanimated.ScrollView;
+type ActionSheetAwareScrollViewHandle = ScrollViewComponent | ScrollView | Reanimated.ScrollView;
 
-type ActionSheetAwareScrollViewProps = ScrollViewProps & {
+type ActionSheetAwareScrollViewProps = Omit<ComponentProps<typeof Reanimated.ScrollView>, 'ref'> & {
     ref?: Ref<ActionSheetAwareScrollViewHandle>;
 };
 
-type RenderActionSheetAwareScrollViewComponent = (props: ActionSheetAwareScrollViewProps) => React.ReactElement<ScrollViewProps>;
+type RenderActionSheetAwareScrollViewComponent = (props: ActionSheetAwareScrollViewProps & {ref?: React.Ref<ActionSheetAwareScrollViewHandle>}) => React.ReactElement;
 
 export type {
     ActionSheetAwareScrollViewProps,
