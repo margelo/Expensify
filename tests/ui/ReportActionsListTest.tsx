@@ -134,12 +134,16 @@ const mockUseCurrentUserPersonalDetails = useCurrentUserPersonalDetails as jest.
 // content is never mounted, so useMarkAsRead/useReportActionsScroll are never called.
 const mockLegendListMount = jest.fn();
 const mockLegendListUnmount = jest.fn();
+let mockShouldCallLegendListOnLoad = true;
 jest.mock('@legendapp/list/react-native', () => {
     const reactModule = jest.requireActual<typeof React>('react');
     return {
-        LegendList: jest.fn(() => {
+        LegendList: jest.fn(({onLoad}: {onLoad?: () => void}) => {
             reactModule.useEffect(() => {
                 mockLegendListMount();
+                if (mockShouldCallLegendListOnLoad) {
+                    onLoad?.();
+                }
                 return () => {
                     mockLegendListUnmount();
                 };
@@ -183,6 +187,7 @@ type MockLegendListProps = {
     initialScrollAtEnd?: boolean;
     maintainScrollAtEnd?: {animated: boolean} | false;
     maintainScrollAtEndThreshold?: number;
+    onLoad?: () => void;
     recycleItems?: boolean;
     renderItem?: (info: {item: OnyxTypes.ReportAction; index: number}) => React.ReactElement | null;
     onStartReached?: () => void;
@@ -300,6 +305,7 @@ describe('ReportActionsList (body)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockHasOnceLoadedReportActions = true;
+        mockShouldCallLegendListOnLoad = true;
         mockUseIsReportLoadPending.mockReturnValue(false);
 
         mockUseCurrentUserPersonalDetails.mockReturnValue({
@@ -423,6 +429,36 @@ describe('ReportActionsList (body)', () => {
         expect(mockLegendListUnmount).toHaveBeenCalledTimes(1);
         expect(getCapturedListProps()?.initialScrollAtEnd).toBe(true);
         expect(getCapturedListProps()?.maintainScrollAtEnd).toEqual({animated: false});
+    });
+
+    it('covers each initial viewport until LegendList finishes rendering it', async () => {
+        mockUseNetwork.mockReturnValue({isOffline: false});
+        mockHasOnceLoadedReportActions = false;
+        mockShouldCallLegendListOnLoad = false;
+        const view = renderReportActionsList();
+
+        expect(screen.getByTestId('ReportActionsSkeletonView')).toBeTruthy();
+
+        act(() => {
+            getCapturedListProps()?.onLoad?.();
+        });
+        expect(screen.queryByTestId('ReportActionsSkeletonView')).toBeNull();
+
+        mockHasOnceLoadedReportActions = true;
+        view.rerender(
+            <ReportActionsList
+                reportID={mockReport.reportID}
+                onLayout={jest.fn()}
+            />,
+        );
+        await waitForBatchedUpdatesWithAct();
+
+        expect(screen.getByTestId('ReportActionsSkeletonView')).toBeTruthy();
+
+        act(() => {
+            getCapturedListProps()?.onLoad?.();
+        });
+        expect(screen.queryByTestId('ReportActionsSkeletonView')).toBeNull();
     });
 
     it('keeps the initial actions visible until the hydrated page is complete', async () => {
