@@ -1,4 +1,5 @@
 import {renderScrollComponent as renderActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
+import ActivityIndicator from '@components/ActivityIndicator';
 import type {ActionListRef} from '@components/FlashList/types';
 import ReportActionsSkeletonView from '@components/ReportActionsSkeletonView';
 
@@ -390,7 +391,7 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListContent
     });
 
     const [loadedInitialViewportListID, setLoadedInitialViewportListID] = useState<string>();
-    const shouldShowInitialViewportSkeleton = !isOffline && (!hasOnceLoadedReportActions || loadedInitialViewportListID !== listID);
+    const shouldShowInitialViewportLoadingIndicator = !isOffline && (!hasOnceLoadedReportActions || loadedInitialViewportListID !== listID);
 
     const handleListLoad = () => {
         onLoad();
@@ -619,12 +620,26 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListContent
                         trackVerticalScrolling(undefined);
                     }}
                 />
-                {shouldShowInitialViewportSkeleton && (
+                {shouldShowInitialViewportLoadingIndicator && (
                     <View
                         pointerEvents="none"
-                        style={[styles.pAbsolute, styles.t0, styles.r0, styles.b0, styles.l0, styles.appBG, styles.overflowHidden, styles.zIndex10]}
+                        style={[
+                            styles.pAbsolute,
+                            styles.t0,
+                            styles.r0,
+                            styles.b0,
+                            styles.l0,
+                            styles.appBG,
+                            styles.alignItemsCenter,
+                            styles.justifyContentCenter,
+                            styles.overflowHidden,
+                            styles.zIndex10,
+                        ]}
                     >
-                        <ReportActionsSkeletonView />
+                        <ActivityIndicator
+                            testID="report-actions-list-loading-indicator"
+                            size={CONST.ACTIVITY_INDICATOR_SIZE.SMALL}
+                        />
                     </View>
                 )}
             </ReportActionsListPaddingView>

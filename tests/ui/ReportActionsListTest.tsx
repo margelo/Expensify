@@ -426,18 +426,18 @@ describe('ReportActionsList (body)', () => {
         expect(getCapturedListProps()?.maintainScrollAtEnd).toEqual({animated: false});
     });
 
-    it('keeps the initial viewport covered until the hydrated LegendList finishes rendering it', async () => {
+    it('shows a loading indicator until the hydrated LegendList finishes rendering its initial viewport', async () => {
         mockUseNetwork.mockReturnValue({isOffline: false});
         mockHasOnceLoadedReportActions = false;
         mockShouldCallLegendListOnLoad = false;
         const view = renderReportActionsList();
 
-        expect(screen.getByTestId('ReportActionsSkeletonView')).toBeTruthy();
+        expect(screen.getByTestId('report-actions-list-loading-indicator')).toBeTruthy();
 
         act(() => {
             getCapturedListProps()?.onLoad?.();
         });
-        expect(screen.getByTestId('ReportActionsSkeletonView')).toBeTruthy();
+        expect(screen.getByTestId('report-actions-list-loading-indicator')).toBeTruthy();
 
         mockHasOnceLoadedReportActions = true;
         view.rerender(
@@ -448,12 +448,12 @@ describe('ReportActionsList (body)', () => {
         );
         await waitForBatchedUpdatesWithAct();
 
-        expect(screen.getByTestId('ReportActionsSkeletonView')).toBeTruthy();
+        expect(screen.getByTestId('report-actions-list-loading-indicator')).toBeTruthy();
 
         act(() => {
             getCapturedListProps()?.onLoad?.();
         });
-        expect(screen.queryByTestId('ReportActionsSkeletonView')).toBeNull();
+        expect(screen.queryByTestId('report-actions-list-loading-indicator')).toBeNull();
     });
 
     it('keeps the initial actions visible until the hydrated page is complete', async () => {
@@ -1244,7 +1244,7 @@ describe('ReportActionsList (body)', () => {
 
             renderReportActionsList({reportID: CONCIERGE_REPORT_ID});
 
-            expect(screen.getByTestId('ReportActionsSkeletonView')).toBeTruthy();
+            expect(screen.getByTestId('report-actions-list-loading-indicator')).toBeTruthy();
             expect(mockLegendList).toHaveBeenCalled();
         });
 
