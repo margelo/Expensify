@@ -390,7 +390,7 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListContent
     });
 
     const [loadedInitialViewportListID, setLoadedInitialViewportListID] = useState<string>();
-    const shouldShowInitialViewportSkeleton = loadedInitialViewportListID !== listID;
+    const shouldShowInitialViewportSkeleton = !isOffline && (!hasOnceLoadedReportActions || loadedInitialViewportListID !== listID);
 
     const handleListLoad = () => {
         onLoad();
