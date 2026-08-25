@@ -394,7 +394,7 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
     });
 
     const [loadedInitialViewportListID, setLoadedInitialViewportListID] = useState<string>();
-    const shouldShowInitialViewportSkeleton = loadedInitialViewportListID !== listID;
+    const shouldShowInitialViewportSkeleton = !isOffline && (!hasOnceLoadedReportActions || loadedInitialViewportListID !== listID);
 
     const handleListLoad = () => {
         onLoad();
