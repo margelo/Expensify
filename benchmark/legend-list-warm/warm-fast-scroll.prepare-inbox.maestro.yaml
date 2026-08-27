@@ -1,0 +1,37 @@
+appId: ${APP_ID}
+name: Prepare Inbox for measured report opening
+tags:
+  - performance
+  - setup
+---
+- launchApp:
+    stopApp: true
+
+# Give the restored React tree time to expose its stable screen selectors.
+# This runs before Flashlight starts measuring.
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 3000
+
+- runFlow:
+    when:
+      platform: Android
+      visible:
+        id: composer
+    commands:
+      - back
+
+- runFlow:
+    when:
+      platform: iOS
+      visible:
+        id: composer
+    commands:
+      - tapOn:
+          text: Back
+
+- extendedWaitUntil:
+    visible:
+      id: '2636639376691898'
+    timeout: 30000

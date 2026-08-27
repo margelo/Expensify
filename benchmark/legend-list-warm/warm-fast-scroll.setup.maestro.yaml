@@ -1,0 +1,54 @@
+appId: ${APP_ID}
+name: Prepare warm report actions list
+tags:
+  - performance
+  - setup
+---
+# All #qddx report actions must already be stored locally. This setup is run
+# before performance collection starts.
+- launchApp:
+    stopApp: true
+
+# Relaunch can restore either Inbox or the previously open report.
+- tapOn:
+    text: Back
+    optional: true
+
+# Android does not expose the header arrow as "Back" to Maestro. Only use the
+# coordinate fallback while the report composer proves we are still in-chat.
+- runFlow:
+    when:
+      visible:
+        id: composer
+    commands:
+      - tapOn:
+          point: '6%,8%'
+
+- extendedWaitUntil:
+    visible:
+      id: '2636639376691898'
+    timeout: 30000
+
+- tapOn:
+    id: '2636639376691898'
+
+- extendedWaitUntil:
+    visible:
+      id: composer
+    timeout: 30000
+
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# #qddx can intentionally open at its unread marker. Move to the live tail
+# before measurement so both implementations start from the same position.
+- repeat:
+    times: 8
+    commands:
+      - swipe:
+          start: '50%,70%'
+          end: '50%,25%'
+          duration: 100
+
+- waitForAnimationToEnd:
+    timeout: 10000

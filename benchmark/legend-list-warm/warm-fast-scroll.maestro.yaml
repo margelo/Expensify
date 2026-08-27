@@ -1,0 +1,60 @@
+appId: ${APP_ID}
+name: Warm report actions list fast scroll
+tags:
+  - performance
+---
+# Precondition: warm-fast-scroll.setup.maestro.yaml completed immediately
+# before performance collection started. This file intentionally contains only
+# the interaction being measured.
+
+# Each burst sends four consecutive flings before Maestro waits for the list to
+# settle. The first two round trips use the validated 50 ms duration; the final
+# two increase the stress with 30 ms flings. A 1 ms settle bound avoids
+# measuring Maestro's default per-swipe idle delay and lets the gesture outrun rendering. Both
+# endpoints stay inside the report list on iOS and Android.
+- repeat:
+    times: 2
+    commands:
+      - repeat:
+          times: 4
+          commands:
+            - swipe:
+                start: '50%,25%'
+                end: '50%,70%'
+                duration: 50
+                waitToSettleTimeoutMs: 1
+      - waitForAnimationToEnd:
+          timeout: 2500
+      - repeat:
+          times: 4
+          commands:
+            - swipe:
+                start: '50%,70%'
+                end: '50%,25%'
+                duration: 50
+                waitToSettleTimeoutMs: 1
+      - waitForAnimationToEnd:
+          timeout: 2500
+- repeat:
+    times: 2
+    commands:
+      - repeat:
+          times: 4
+          commands:
+            - swipe:
+                start: '50%,25%'
+                end: '50%,70%'
+                duration: 30
+                waitToSettleTimeoutMs: 1
+      - waitForAnimationToEnd:
+          timeout: 2500
+      - repeat:
+          times: 4
+          commands:
+            - swipe:
+                start: '50%,70%'
+                end: '50%,25%'
+                duration: 30
+                waitToSettleTimeoutMs: 1
+      - waitForAnimationToEnd:
+          timeout: 2500

@@ -1,0 +1,28 @@
+appId: ${APP_ID}
+name: Open warm report for measured scrolling
+tags:
+  - performance
+---
+# Flashlight reports skip the first two seconds of profiler warm-up. Keep two
+# more seconds of stable Inbox rendering in the graph before opening the report.
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 4000
+
+- tapOn:
+    id: '2636639376691898'
+
+- extendedWaitUntil:
+    visible:
+      id: composer
+    timeout: 30000
+
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Keep the requested pause after opening the report inside the measured flow.
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 3000

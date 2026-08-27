@@ -1,0 +1,111 @@
+appId: ${APP_ID}
+name: Warm report actions list escalating scroll stress
+tags:
+  - performance
+---
+- runFlow: warm-fast-scroll.setup.maestro.yaml
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 3000
+
+# Toward the oldest report actions: two fast flings, two faster flings, then
+# five faster flings intended to reach the top of the chat.
+- repeat:
+    times: 2
+    commands:
+      - swipe:
+          start: '50%,25%'
+          end: '50%,70%'
+          duration: 50
+          waitToSettleTimeoutMs: 1
+      - runScript:
+          file: wait.maestro.js
+          env:
+            WAIT_MS: 200
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 2000
+- repeat:
+    times: 2
+    commands:
+      - swipe:
+          start: '50%,25%'
+          end: '50%,70%'
+          duration: 30
+          waitToSettleTimeoutMs: 1
+      - runScript:
+          file: wait.maestro.js
+          env:
+            WAIT_MS: 200
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 2000
+- repeat:
+    times: 5
+    commands:
+      - swipe:
+          start: '50%,25%'
+          end: '50%,70%'
+          duration: 30
+          waitToSettleTimeoutMs: 1
+      - runScript:
+          file: wait.maestro.js
+          env:
+            WAIT_MS: 200
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 2000
+
+# Mirror the same sequence toward the live tail.
+- repeat:
+    times: 2
+    commands:
+      - swipe:
+          start: '50%,70%'
+          end: '50%,25%'
+          duration: 50
+          waitToSettleTimeoutMs: 1
+      - runScript:
+          file: wait.maestro.js
+          env:
+            WAIT_MS: 200
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 2000
+- repeat:
+    times: 2
+    commands:
+      - swipe:
+          start: '50%,70%'
+          end: '50%,25%'
+          duration: 30
+          waitToSettleTimeoutMs: 1
+      - runScript:
+          file: wait.maestro.js
+          env:
+            WAIT_MS: 200
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 2000
+- repeat:
+    times: 5
+    commands:
+      - swipe:
+          start: '50%,70%'
+          end: '50%,25%'
+          duration: 30
+          waitToSettleTimeoutMs: 1
+      - runScript:
+          file: wait.maestro.js
+          env:
+            WAIT_MS: 200
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 2000
