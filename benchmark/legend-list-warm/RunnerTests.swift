@@ -275,17 +275,37 @@ final class RunnerTests: XCTestCase {
   ) {
     // XCUITest offsets use screen points rather than physical pixels.
     let chatTapYOffset: CGFloat = 200
-    let baseSwipeVelocity: XCUIGestureVelocity = 100_000
+    // XCTest's predefined velocities use sentinel raw values, so keep the
+    // adjustable baseline as an explicit screen-point velocity for scaling.
+    let baseSwipeVelocityPointsPerSecond: CGFloat = 3_500
+    let baseSwipeVelocity = XCUIGestureVelocity(
+      rawValue: baseSwipeVelocityPointsPerSecond
+    )
     let acceleratedSwipeVelocityFactor: CGFloat = 1.5
     let acceleratedSwipeVelocity = XCUIGestureVelocity(
       rawValue: baseSwipeVelocity.rawValue * acceleratedSwipeVelocityFactor
     )
-    let upperListCoordinate = targetApp.coordinate(
-      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)
-    )
-    let lowerListCoordinate = targetApp.coordinate(
-      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.70)
-    )
+    let interSwipeDelay: TimeInterval = 0.4
+    // XCUITest serializes touches, so alternate two short downward paths to
+    // approximate a user rapidly scrolling toward older actions with both thumbs.
+    let thumbSwipePaths: [(start: XCUICoordinate, end: XCUICoordinate)] = [
+      (
+        start: targetApp.coordinate(
+          withNormalizedOffset: CGVector(dx: 0.34, dy: 0.30)
+        ),
+        end: targetApp.coordinate(
+          withNormalizedOffset: CGVector(dx: 0.34, dy: 0.62)
+        )
+      ),
+      (
+        start: targetApp.coordinate(
+          withNormalizedOffset: CGVector(dx: 0.66, dy: 0.30)
+        ),
+        end: targetApp.coordinate(
+          withNormalizedOffset: CGVector(dx: 0.66, dy: 0.62)
+        )
+      ),
+    ]
     let chatTapCoordinate = targetApp.coordinate(
       withNormalizedOffset: CGVector(dx: 0.5, dy: 0)
     ).withOffset(CGVector(dx: 0, dy: chatTapYOffset))
@@ -294,46 +314,40 @@ final class RunnerTests: XCTestCase {
     chatTapCoordinate.tap()
     sleep(5)
 
-    performApproximateDirectionalListStress(
-      from: upperListCoordinate,
-      to: lowerListCoordinate,
+    performApproximateAlternatingThumbListStress(
+      swipePaths: thumbSwipePaths,
       baseVelocity: baseSwipeVelocity,
-      acceleratedVelocity: acceleratedSwipeVelocity
-    )
-    performApproximateDirectionalListStress(
-      from: lowerListCoordinate,
-      to: upperListCoordinate,
-      baseVelocity: baseSwipeVelocity,
-      acceleratedVelocity: acceleratedSwipeVelocity
+      acceleratedVelocity: acceleratedSwipeVelocity,
+      interSwipeDelay: interSwipeDelay
     )
   }
 
   @MainActor
-  private func performApproximateDirectionalListStress(
-    from start: XCUICoordinate,
-    to end: XCUICoordinate,
+  private func performApproximateAlternatingThumbListStress(
+    swipePaths: [(start: XCUICoordinate, end: XCUICoordinate)],
     baseVelocity: XCUIGestureVelocity,
-    acceleratedVelocity: XCUIGestureVelocity
+    acceleratedVelocity: XCUIGestureVelocity,
+    interSwipeDelay: TimeInterval
   ) {
     performReportActionsListSwipes(
-      from: start,
-      to: end,
+      paths: swipePaths,
       velocity: baseVelocity,
-      count: 2
+      count: 10,
+      interSwipeDelay: interSwipeDelay
     )
     sleep(2)
     performReportActionsListSwipes(
-      from: start,
-      to: end,
+      paths: swipePaths,
       velocity: acceleratedVelocity,
-      count: 2
+      count: 10,
+      interSwipeDelay: interSwipeDelay
     )
     sleep(2)
     performReportActionsListSwipes(
-      from: start,
-      to: end,
+      paths: swipePaths,
       velocity: acceleratedVelocity,
-      count: 10
+      count: 10,
+      interSwipeDelay: interSwipeDelay
     )
     sleep(5)
   }
@@ -420,12 +434,29 @@ final class RunnerTests: XCTestCase {
     count: Int,
     interSwipeDelay: TimeInterval = 0
   ) {
+    performReportActionsListSwipes(
+      paths: [(start: start, end: end)],
+      velocity: velocity,
+      count: count,
+      interSwipeDelay: interSwipeDelay
+    )
+  }
+
+  @MainActor
+  private func performReportActionsListSwipes(
+    paths: [(start: XCUICoordinate, end: XCUICoordinate)],
+    velocity: XCUIGestureVelocity,
+    count: Int,
+    interSwipeDelay: TimeInterval = 0
+  ) {
+    precondition(!paths.isEmpty)
     for index in 0..<count {
-      start.press(
+      let path = paths[index % paths.count]
+      path.start.press(
         forDuration: 0.001,
-        thenDragTo: end,
+        thenDragTo: path.end,
         withVelocity: velocity,
-        thenHoldForDuration: 0
+        thenHoldForDuration: 0.05
       )
       if index < count - 1 && interSwipeDelay > 0 {
         Thread.sleep(forTimeInterval: interSwipeDelay)
