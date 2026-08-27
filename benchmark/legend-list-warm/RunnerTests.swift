@@ -285,27 +285,9 @@ final class RunnerTests: XCTestCase {
     let acceleratedSwipeVelocity = XCUIGestureVelocity(
       rawValue: baseSwipeVelocity.rawValue * acceleratedSwipeVelocityFactor
     )
-    let interSwipeDelay: TimeInterval = 0.4
-    // XCUITest serializes touches, so alternate two short downward paths to
-    // approximate a user rapidly scrolling toward older actions with both thumbs.
-    let thumbSwipePaths: [(start: XCUICoordinate, end: XCUICoordinate)] = [
-      (
-        start: targetApp.coordinate(
-          withNormalizedOffset: CGVector(dx: 0.34, dy: 0.30)
-        ),
-        end: targetApp.coordinate(
-          withNormalizedOffset: CGVector(dx: 0.34, dy: 0.62)
-        )
-      ),
-      (
-        start: targetApp.coordinate(
-          withNormalizedOffset: CGVector(dx: 0.66, dy: 0.30)
-        ),
-        end: targetApp.coordinate(
-          withNormalizedOffset: CGVector(dx: 0.66, dy: 0.62)
-        )
-      ),
-    ]
+    let releaseGap: TimeInterval = 0.04
+    let swipeStart = CGVector(dx: 0.5, dy: 0.30)
+    let swipeEnd = CGVector(dx: 0.5, dy: 0.62)
     let chatTapCoordinate = targetApp.coordinate(
       withNormalizedOffset: CGVector(dx: 0.5, dy: 0)
     ).withOffset(CGVector(dx: 0, dy: chatTapYOffset))
@@ -314,42 +296,107 @@ final class RunnerTests: XCTestCase {
     chatTapCoordinate.tap()
     sleep(5)
 
-    performApproximateAlternatingThumbListStress(
-      swipePaths: thumbSwipePaths,
+    performRapidReleasedListStress(
+      targetApp,
+      fromNormalizedOffset: swipeStart,
+      toNormalizedOffset: swipeEnd,
       baseVelocity: baseSwipeVelocity,
       acceleratedVelocity: acceleratedSwipeVelocity,
-      interSwipeDelay: interSwipeDelay
+      releaseGap: releaseGap
     )
   }
 
   @MainActor
-  private func performApproximateAlternatingThumbListStress(
-    swipePaths: [(start: XCUICoordinate, end: XCUICoordinate)],
+  private func performRapidReleasedListStress(
+    _ targetApp: XCUIApplication,
+    fromNormalizedOffset start: CGVector,
+    toNormalizedOffset end: CGVector,
     baseVelocity: XCUIGestureVelocity,
     acceleratedVelocity: XCUIGestureVelocity,
-    interSwipeDelay: TimeInterval
+    releaseGap: TimeInterval
   ) {
-    performReportActionsListSwipes(
-      paths: swipePaths,
+    performSynthesizedSwipeBurst(
+      targetApp,
+      fromNormalizedOffset: start,
+      toNormalizedOffset: end,
       velocity: baseVelocity,
       count: 10,
-      interSwipeDelay: interSwipeDelay
+      releaseGap: releaseGap
     )
     sleep(2)
-    performReportActionsListSwipes(
-      paths: swipePaths,
+    performSynthesizedSwipeBurst(
+      targetApp,
+      fromNormalizedOffset: start,
+      toNormalizedOffset: end,
       velocity: acceleratedVelocity,
       count: 10,
-      interSwipeDelay: interSwipeDelay
+      releaseGap: releaseGap
     )
     sleep(2)
-    performReportActionsListSwipes(
-      paths: swipePaths,
+    performSynthesizedSwipeBurst(
+      targetApp,
+      fromNormalizedOffset: start,
+      toNormalizedOffset: end,
       velocity: acceleratedVelocity,
       count: 10,
-      interSwipeDelay: interSwipeDelay
+      releaseGap: releaseGap
     )
     sleep(5)
+  }
+
+  @MainActor
+  private func performSynthesizedSwipeBurst(
+    _ targetApp: XCUIApplication,
+    fromNormalizedOffset startOffset: CGVector,
+    toNormalizedOffset endOffset: CGVector,
+    velocity: XCUIGestureVelocity,
+    count: Int,
+    releaseGap: TimeInterval
+  ) {
+    let frame = targetApp.frame
+    let start = CGPoint(
+      x: frame.minX + frame.width * startOffset.dx,
+      y: frame.minY + frame.height * startOffset.dy
+    )
+    let end = CGPoint(
+      x: frame.minX + frame.width * endOffset.dx,
+      y: frame.minY + frame.height * endOffset.dy
+    )
+    let distance = hypot(end.x - start.x, end.y - start.y)
+    let movementDurationMs = max(
+      Double(distance / velocity.rawValue) * 1_000,
+      32
+    )
+    let releaseGapMs = releaseGap * 1_000
+    let sampleCount = max(3, Int(ceil(movementDurationMs / 16)))
+    let cycleDurationMs = movementDurationMs + releaseGapMs
+    let pointerSamples: [[[String: NSNumber]]] = (0..<count).map { swipeIndex in
+      let gestureStartMs = Double(swipeIndex) * cycleDurationMs
+      return (0...sampleCount).map { sampleIndex in
+        let progress = Double(sampleIndex) / Double(sampleCount)
+        let positionProgress = CGFloat(progress)
+        return [
+          "x": NSNumber(
+            value: Double(start.x + (end.x - start.x) * positionProgress)
+          ),
+          "y": NSNumber(
+            value: Double(start.y + (end.y - start.y) * positionProgress)
+          ),
+          "offsetMs": NSNumber(
+            value: gestureStartMs + movementDurationMs * progress
+          ),
+        ]
+      }
+    }
+
+    let synthesisError = RunnerSynthesizedGesture.synthesizeGesture(
+      withApplication: targetApp,
+      pointerSamples: pointerSamples
+    )
+    XCTAssertNil(
+      synthesisError,
+      synthesisError ?? "Rapid swipe burst synthesis failed"
+    )
   }
 
   // Retained for reproducing the original element-driven benchmark flow.
