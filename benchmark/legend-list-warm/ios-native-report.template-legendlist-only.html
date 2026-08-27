@@ -86,6 +86,7 @@
     .value-card.legend { border-color: rgba(108, 229, 167, .25); }
     .improvement-slot { display: flex; align-items: end; height: 29px; margin-top: 5px; }
     .improvement { display: inline-block; padding: 5px 8px; border-radius: 7px; background: var(--legend-dim); color: var(--legend); font-size: 12px; font-weight: 750; }
+    .improvement.regression { background: rgba(255, 135, 120, .12); color: #ff9d90; }
     .spark { display: flex; gap: 5px; align-items: end; height: 28px; margin-top: 5px; }
     .spark i { flex: 1; min-height: 4px; border-radius: 3px 3px 1px 1px; background: var(--flash); opacity: .74; }
     .legend .spark i { background: var(--legend); }
@@ -193,7 +194,10 @@
     const minimum = Math.min(...converted);
     const maximum = Math.max(...converted);
     const hasComparableBaseline = Number.isFinite(baselineAverage) && baselineAverage !== 0;
-    const delta = hasComparableBaseline ? `<span class="improvement">${improvement(baselineAverage, average).toFixed(1)}% lower</span>` : '';
+    const deltaPercent = hasComparableBaseline ? improvement(baselineAverage, average) : undefined;
+    const delta = Number.isFinite(deltaPercent)
+      ? `<span class="improvement${deltaPercent < 0 ? ' regression' : ''}">${Math.abs(deltaPercent).toFixed(1)}% ${deltaPercent >= 0 ? 'lower' : 'higher'}</span>`
+      : '';
     return `<div class="value-card${accent ? ' legend' : ''}">
       <div class="value">${average.toFixed(definition.digits)} <small>${definition.unit}</small></div>
       <div class="range">mean ± ${standardDeviation.toFixed(definition.digits)} · ${values.length} runs</div>
