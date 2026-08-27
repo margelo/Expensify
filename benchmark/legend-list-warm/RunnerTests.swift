@@ -250,11 +250,14 @@ final class RunnerTests: XCTestCase {
     let measureOptions = XCTMeasureOptions()
     measureOptions.iterationCount = 1
     measureOptions.invocationOptions = [.manuallyStart, .manuallyStop]
-    let metrics: [XCTMetric] = [
+    var metrics: [XCTMetric] = [
       XCTClockMetric(),
       XCTCPUMetric(application: targetApp),
       XCTMemoryMetric(application: targetApp),
     ]
+    if #available(iOS 26.0, *) {
+      metrics.append(XCTHitchMetric(application: targetApp))
+    }
 
     measure(
       metrics: metrics,
