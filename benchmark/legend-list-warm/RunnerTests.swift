@@ -247,15 +247,6 @@ final class RunnerTests: XCTestCase {
   private func runWarmReportActionsListBenchmark(bundleIdentifier: String) {
     let targetApp = XCUIApplication(bundleIdentifier: bundleIdentifier)
 
-    let towardOlderStart = targetApp.coordinate(
-      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)
-    )
-    let towardOlderEnd = targetApp.coordinate(
-      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.70)
-    )
-    let benchmarkVelocity: XCUIGestureVelocity = 100_000
-    let fasterBenchmarkVelocity: XCUIGestureVelocity = 200_000
-
     let measureOptions = XCTMeasureOptions()
     measureOptions.iterationCount = 1
     measureOptions.invocationOptions = [.manuallyStart, .manuallyStop]
@@ -269,37 +260,123 @@ final class RunnerTests: XCTestCase {
       metrics: metrics,
       options: measureOptions
     ) {
-      let reportRow = prepareWarmReportActionsListInbox(targetApp)
+      _ = prepareWarmReportActionsListInbox(targetApp)
       startMeasuring()
-
-      // Keep four seconds of Inbox baseline. The dashboard omits the first two
-      // seconds of profiler warm-up and retains two stable seconds before tap.
-      sleep(4)
-      reportRow.tap()
-
-      let composer = targetApp.textViews["composer"]
-      XCTAssertTrue(
-        composer.waitForExistence(timeout: 30),
-        "The benchmark app did not render #qddx"
-      )
-      sleep(3)
-
-      stressReportActionsList(
-        from: towardOlderStart,
-        to: towardOlderEnd,
-        benchmarkVelocity: benchmarkVelocity,
-        fasterBenchmarkVelocity: fasterBenchmarkVelocity
-      )
-      stressReportActionsList(
-        from: towardOlderEnd,
-        to: towardOlderStart,
-        benchmarkVelocity: benchmarkVelocity,
-        fasterBenchmarkVelocity: fasterBenchmarkVelocity
-      )
+      performApproximateGestureReportActionsListBenchmark(targetApp)
       stopMeasuring()
     }
 
     sleep(1)
+  }
+
+  @MainActor
+  private func performApproximateGestureReportActionsListBenchmark(
+    _ targetApp: XCUIApplication
+  ) {
+    // XCUITest offsets use screen points rather than physical pixels.
+    let chatTapYOffset: CGFloat = 200
+    let baseSwipeVelocity: XCUIGestureVelocity = 100_000
+    let acceleratedSwipeVelocityFactor: CGFloat = 1.5
+    let acceleratedSwipeVelocity = XCUIGestureVelocity(
+      rawValue: baseSwipeVelocity.rawValue * acceleratedSwipeVelocityFactor
+    )
+    let upperListCoordinate = targetApp.coordinate(
+      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)
+    )
+    let lowerListCoordinate = targetApp.coordinate(
+      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.70)
+    )
+    let chatTapCoordinate = targetApp.coordinate(
+      withNormalizedOffset: CGVector(dx: 0.5, dy: 0)
+    ).withOffset(CGVector(dx: 0, dy: chatTapYOffset))
+
+    sleep(2)
+    chatTapCoordinate.tap()
+    sleep(5)
+
+    performApproximateDirectionalListStress(
+      from: upperListCoordinate,
+      to: lowerListCoordinate,
+      baseVelocity: baseSwipeVelocity,
+      acceleratedVelocity: acceleratedSwipeVelocity
+    )
+    performApproximateDirectionalListStress(
+      from: lowerListCoordinate,
+      to: upperListCoordinate,
+      baseVelocity: baseSwipeVelocity,
+      acceleratedVelocity: acceleratedSwipeVelocity
+    )
+  }
+
+  @MainActor
+  private func performApproximateDirectionalListStress(
+    from start: XCUICoordinate,
+    to end: XCUICoordinate,
+    baseVelocity: XCUIGestureVelocity,
+    acceleratedVelocity: XCUIGestureVelocity
+  ) {
+    performReportActionsListSwipes(
+      from: start,
+      to: end,
+      velocity: baseVelocity,
+      count: 2
+    )
+    sleep(2)
+    performReportActionsListSwipes(
+      from: start,
+      to: end,
+      velocity: acceleratedVelocity,
+      count: 2
+    )
+    sleep(2)
+    performReportActionsListSwipes(
+      from: start,
+      to: end,
+      velocity: acceleratedVelocity,
+      count: 10
+    )
+    sleep(5)
+  }
+
+  // Retained for reproducing the original element-driven benchmark flow.
+  @MainActor
+  private func performLegacyWarmReportActionsListBenchmark(
+    _ targetApp: XCUIApplication,
+    reportRow: XCUIElement
+  ) {
+    let towardOlderStart = targetApp.coordinate(
+      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)
+    )
+    let towardOlderEnd = targetApp.coordinate(
+      withNormalizedOffset: CGVector(dx: 0.5, dy: 0.70)
+    )
+    let benchmarkVelocity: XCUIGestureVelocity = 100_000
+    let fasterBenchmarkVelocity: XCUIGestureVelocity = 200_000
+
+    // Keep four seconds of Inbox baseline. The dashboard omits the first two
+    // seconds of profiler warm-up and retains two stable seconds before tap.
+    sleep(4)
+    reportRow.tap()
+
+    let composer = targetApp.textViews["composer"]
+    XCTAssertTrue(
+      composer.waitForExistence(timeout: 30),
+      "The benchmark app did not render #qddx"
+    )
+    sleep(3)
+
+    stressReportActionsList(
+      from: towardOlderStart,
+      to: towardOlderEnd,
+      benchmarkVelocity: benchmarkVelocity,
+      fasterBenchmarkVelocity: fasterBenchmarkVelocity
+    )
+    stressReportActionsList(
+      from: towardOlderEnd,
+      to: towardOlderStart,
+      benchmarkVelocity: benchmarkVelocity,
+      fasterBenchmarkVelocity: fasterBenchmarkVelocity
+    )
   }
 
   @MainActor
@@ -313,21 +390,24 @@ final class RunnerTests: XCTestCase {
       from: start,
       to: end,
       velocity: benchmarkVelocity,
-      count: 2
+      count: 2,
+      interSwipeDelay: 0.2
     )
     sleep(2)
     performReportActionsListSwipes(
       from: start,
       to: end,
       velocity: fasterBenchmarkVelocity,
-      count: 2
+      count: 2,
+      interSwipeDelay: 0.2
     )
     sleep(2)
     performReportActionsListSwipes(
       from: start,
       to: end,
       velocity: fasterBenchmarkVelocity,
-      count: 5
+      count: 5,
+      interSwipeDelay: 0.2
     )
     sleep(2)
   }
@@ -337,7 +417,8 @@ final class RunnerTests: XCTestCase {
     from start: XCUICoordinate,
     to end: XCUICoordinate,
     velocity: XCUIGestureVelocity,
-    count: Int
+    count: Int,
+    interSwipeDelay: TimeInterval = 0
   ) {
     for index in 0..<count {
       start.press(
@@ -346,8 +427,8 @@ final class RunnerTests: XCTestCase {
         withVelocity: velocity,
         thenHoldForDuration: 0
       )
-      if index < count - 1 {
-        Thread.sleep(forTimeInterval: 0.2)
+      if index < count - 1 && interSwipeDelay > 0 {
+        Thread.sleep(forTimeInterval: interSwipeDelay)
       }
     }
   }
