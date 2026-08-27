@@ -18,12 +18,13 @@ function readArgument(name) {
     return value;
 }
 
-function validateRows(rows, implementation) {
-    if (!Array.isArray(rows) || rows.length === 0) {
-        throw new Error(`${implementation} must contain at least one result row`);
+function validateRows(rows, implementation, {allowEmpty = false} = {}) {
+    if (!Array.isArray(rows) || (!allowEmpty && rows.length === 0)) {
+        throw new Error(`${implementation} must contain ${allowEmpty ? 'an array of' : 'at least one'} result row${allowEmpty ? 's' : ''}`);
     }
 
     const requiredMetrics = ['run', 'durationSeconds', 'cpuSeconds', 'physicalMemoryKB', 'peakPhysicalMemoryKB', 'cpuCyclesKC', 'instructionsKI'];
+    const optionalMetrics = ['hitchCount', 'hitchTotalDurationSeconds', 'hitchTimeRatioMsPerS'];
     for (const [index, row] of rows.entries()) {
         if (!row || typeof row !== 'object') {
             throw new Error(`${implementation}[${index}] must be an object`);
@@ -31,6 +32,11 @@ function validateRows(rows, implementation) {
         for (const metric of requiredMetrics) {
             if (!Number.isFinite(row[metric])) {
                 throw new Error(`${implementation}[${index}].${metric} must be a finite number`);
+            }
+        }
+        for (const metric of optionalMetrics) {
+            if (metric in row && !Number.isFinite(row[metric])) {
+                throw new Error(`${implementation}[${index}].${metric} must be a finite number when provided`);
             }
         }
     }
@@ -43,7 +49,7 @@ function validateResults(results) {
     if (typeof results.metadata.date !== 'string' || Number.isNaN(Date.parse(`${results.metadata.date}T00:00:00Z`))) {
         throw new Error('metadata.date must use YYYY-MM-DD format');
     }
-    validateRows(results.flashlist, 'flashlist');
+    validateRows(results.flashlist, 'flashlist', {allowEmpty: true});
     validateRows(results.legendlist, 'legendlist');
 }
 
