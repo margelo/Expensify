@@ -610,7 +610,6 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
                     alignItemsAtEnd={!shouldBeAlignedToTop}
                     // Only follow the real latest page. Older/linked windows must retain their visible anchor.
                     maintainScrollAtEnd={!hasNewerActions && {animated: false}}
-                    // Keyboard avoidance can shrink the viewport by almost a full screen before LegendList evaluates end proximity.
                     // Leave the end-follow region as soon as the user starts reading older messages.
                     maintainScrollAtEndThreshold={0.01}
                     maintainVisibleContentPosition

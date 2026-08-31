@@ -463,6 +463,7 @@ describe('ReportActionsList (body)', () => {
         view.rerender(
             <ReportActionsList
                 reportID={mockReport.reportID}
+                conciergeChat={undefined}
                 onLayout={jest.fn()}
             />,
         );
