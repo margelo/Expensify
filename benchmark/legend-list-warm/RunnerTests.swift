@@ -16,6 +16,11 @@ typealias RunnerImage = NSImage
 #endif
 
 final class RunnerTests: XCTestCase {
+  private enum ReportActionsListScrollFlow {
+    case rapidReleasedBursts
+    case slowContinuousPans
+  }
+
   enum RunnerErrorDomain {
     static let general = "AgentDeviceRunner"
     static let exception = "AgentDeviceRunner.NSException"
@@ -198,14 +203,32 @@ final class RunnerTests: XCTestCase {
   @MainActor
   func testFlashListWarmFastScroll() throws {
     runWarmReportActionsListBenchmark(
-      bundleIdentifier: "com.chrispader.expensify.expensifylite.flashlist"
+      bundleIdentifier: "com.chrispader.expensify.expensifylite.flashlist",
+      scrollFlow: .rapidReleasedBursts
     )
   }
 
   @MainActor
   func testLegendListWarmFastScroll() throws {
     runWarmReportActionsListBenchmark(
-      bundleIdentifier: "com.chrispader.expensify.expensifylite.legendlist"
+      bundleIdentifier: "com.chrispader.expensify.expensifylite.legendlist",
+      scrollFlow: .rapidReleasedBursts
+    )
+  }
+
+  @MainActor
+  func testFlashListWarmSlowContinuousScroll() throws {
+    runWarmReportActionsListBenchmark(
+      bundleIdentifier: "com.chrispader.expensify.expensifylite.flashlist",
+      scrollFlow: .slowContinuousPans
+    )
+  }
+
+  @MainActor
+  func testLegendListWarmSlowContinuousScroll() throws {
+    runWarmReportActionsListBenchmark(
+      bundleIdentifier: "com.chrispader.expensify.expensifylite.legendlist",
+      scrollFlow: .slowContinuousPans
     )
   }
 
@@ -244,7 +267,10 @@ final class RunnerTests: XCTestCase {
   }
 
   @MainActor
-  private func runWarmReportActionsListBenchmark(bundleIdentifier: String) {
+  private func runWarmReportActionsListBenchmark(
+    bundleIdentifier: String,
+    scrollFlow: ReportActionsListScrollFlow
+  ) {
     let targetApp = XCUIApplication(bundleIdentifier: bundleIdentifier)
 
     let measureOptions = XCTMeasureOptions()
@@ -265,7 +291,12 @@ final class RunnerTests: XCTestCase {
     ) {
       _ = prepareWarmReportActionsListInbox(targetApp)
       startMeasuring()
-      performApproximateGestureReportActionsListBenchmark(targetApp)
+      switch scrollFlow {
+      case .rapidReleasedBursts:
+        performApproximateGestureReportActionsListBenchmark(targetApp)
+      case .slowContinuousPans:
+        performSlowContinuousGestureReportActionsListBenchmark(targetApp)
+      }
       stopMeasuring()
     }
 
@@ -276,8 +307,6 @@ final class RunnerTests: XCTestCase {
   private func performApproximateGestureReportActionsListBenchmark(
     _ targetApp: XCUIApplication
   ) {
-    // XCUITest offsets use screen points rather than physical pixels.
-    let chatTapYOffset: CGFloat = 200
     // XCTest's predefined velocities use sentinel raw values, so keep the
     // adjustable baseline as an explicit screen-point velocity for scaling.
     let baseSwipeVelocityPointsPerSecond: CGFloat = 3_500
@@ -291,13 +320,8 @@ final class RunnerTests: XCTestCase {
     let releaseGap: TimeInterval = 0.04
     let swipeStart = CGVector(dx: 0.5, dy: 0.30)
     let swipeEnd = CGVector(dx: 0.5, dy: 0.62)
-    let chatTapCoordinate = targetApp.coordinate(
-      withNormalizedOffset: CGVector(dx: 0.5, dy: 0)
-    ).withOffset(CGVector(dx: 0, dy: chatTapYOffset))
 
-    sleep(2)
-    chatTapCoordinate.tap()
-    sleep(5)
+    openMeasuredReportForScrolling(targetApp)
 
     performRapidReleasedListStress(
       targetApp,
@@ -310,6 +334,48 @@ final class RunnerTests: XCTestCase {
   }
 
   @MainActor
+  private func performSlowContinuousGestureReportActionsListBenchmark(
+    _ targetApp: XCUIApplication
+  ) {
+    // This is the one central speed control for the slow path. All pans use it.
+    let slowPanVelocityPointsPerSecond: CGFloat = 900
+    let slowPanVelocity = XCUIGestureVelocity(
+      rawValue: slowPanVelocityPointsPerSecond
+    )
+    let panCount = 30
+    let releaseGap: TimeInterval = 0.04
+    let swipeStart = CGVector(dx: 0.5, dy: 0.30)
+    let swipeEnd = CGVector(dx: 0.5, dy: 0.62)
+
+    openMeasuredReportForScrolling(targetApp)
+
+    // Each pointer path is a separate touch-down, slow pan, and full lift. The
+    // short release gap keeps the sequence continuous without merging pans.
+    performSynthesizedReleasedPanSequence(
+      targetApp,
+      fromNormalizedOffset: swipeStart,
+      toNormalizedOffset: swipeEnd,
+      velocity: slowPanVelocity,
+      panCount: panCount,
+      releaseGap: releaseGap
+    )
+    sleep(5)
+  }
+
+  @MainActor
+  private func openMeasuredReportForScrolling(_ targetApp: XCUIApplication) {
+    // XCUITest offsets use screen points rather than physical pixels.
+    let chatTapYOffset: CGFloat = 200
+    let chatTapCoordinate = targetApp.coordinate(
+      withNormalizedOffset: CGVector(dx: 0.5, dy: 0)
+    ).withOffset(CGVector(dx: 0, dy: chatTapYOffset))
+
+    sleep(2)
+    chatTapCoordinate.tap()
+    sleep(5)
+  }
+
+  @MainActor
   private func performRapidReleasedListStress(
     _ targetApp: XCUIApplication,
     fromNormalizedOffset start: CGVector,
@@ -318,42 +384,42 @@ final class RunnerTests: XCTestCase {
     acceleratedVelocity: XCUIGestureVelocity,
     releaseGap: TimeInterval
   ) {
-    performSynthesizedSwipeBurst(
+    performSynthesizedReleasedPanSequence(
       targetApp,
       fromNormalizedOffset: start,
       toNormalizedOffset: end,
       velocity: baseVelocity,
-      count: 10,
+      panCount: 10,
       releaseGap: releaseGap
     )
     sleep(2)
-    performSynthesizedSwipeBurst(
+    performSynthesizedReleasedPanSequence(
       targetApp,
       fromNormalizedOffset: start,
       toNormalizedOffset: end,
       velocity: acceleratedVelocity,
-      count: 10,
+      panCount: 10,
       releaseGap: releaseGap
     )
     sleep(2)
-    performSynthesizedSwipeBurst(
+    performSynthesizedReleasedPanSequence(
       targetApp,
       fromNormalizedOffset: start,
       toNormalizedOffset: end,
       velocity: acceleratedVelocity,
-      count: 10,
+      panCount: 10,
       releaseGap: releaseGap
     )
     sleep(5)
   }
 
   @MainActor
-  private func performSynthesizedSwipeBurst(
+  private func performSynthesizedReleasedPanSequence(
     _ targetApp: XCUIApplication,
     fromNormalizedOffset startOffset: CGVector,
     toNormalizedOffset endOffset: CGVector,
     velocity: XCUIGestureVelocity,
-    count: Int,
+    panCount: Int,
     releaseGap: TimeInterval
   ) {
     let frame = targetApp.frame
@@ -373,7 +439,7 @@ final class RunnerTests: XCTestCase {
     let releaseGapMs = releaseGap * 1_000
     let sampleCount = max(3, Int(ceil(movementDurationMs / 16)))
     let cycleDurationMs = movementDurationMs + releaseGapMs
-    let pointerSamples: [[[String: NSNumber]]] = (0..<count).map { swipeIndex in
+    let pointerSamples: [[[String: NSNumber]]] = (0..<panCount).map { swipeIndex in
       let gestureStartMs = Double(swipeIndex) * cycleDurationMs
       return (0...sampleCount).map { sampleIndex in
         let progress = Double(sampleIndex) / Double(sampleCount)
@@ -398,7 +464,7 @@ final class RunnerTests: XCTestCase {
     )
     XCTAssertNil(
       synthesisError,
-      synthesisError ?? "Rapid swipe burst synthesis failed"
+      synthesisError ?? "Released pan sequence synthesis failed"
     )
   }
 
