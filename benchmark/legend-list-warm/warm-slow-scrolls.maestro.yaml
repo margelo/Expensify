@@ -1,0 +1,18 @@
+appId: ${APP_ID}
+name: Warm chat slow continuous released pans
+tags:
+  - performance
+  - slow
+---
+- runFlow: warm-scroll.open-report.maestro.yaml
+# 30 individually released pans at 900 dp/s, 40ms gaps, then a five-second pause.
+- runScript:
+    file: android-gestures.maestro.js
+    env:
+      SCROLL_FLOW: slow
+- assertTrue: ${output.gestures.status === 'SUCCESS' && output.gestures.panCount === 30}
+- runFlow:
+    when:
+      true: ${CAPTURE_EVIDENCE === '1'}
+    commands:
+      - takeScreenshot: after-pans

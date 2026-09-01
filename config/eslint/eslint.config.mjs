@@ -755,6 +755,17 @@ const config = defineConfig([
     },
 
     {
+        // Physical-device benchmark tools run in Node, outside the app's TypeScript project.
+        files: ['benchmark/legend-list-warm/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                project: path.resolve(projectRoot, 'benchmark/legend-list-warm/tsconfig.json'),
+                projectService: false,
+            },
+        },
+    },
+
+    {
         files: ['server/victory-chart-renderer/**/*.ts', 'server/victory-chart-renderer/**/*.tsx'],
         languageOptions: {
             parserOptions: {

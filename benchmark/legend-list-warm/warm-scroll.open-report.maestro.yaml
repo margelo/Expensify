@@ -1,0 +1,23 @@
+appId: ${APP_ID}
+name: Open warm report with XCTest timing
+---
+# Inbox setup runs before measurement. The measured flow matches XCTest's
+# two-second baseline and five-second pause after opening the chat.
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 2000
+- tapOn:
+    id: '2636639376691898'
+    waitToSettleTimeoutMs: 1
+- runScript:
+    file: wait.maestro.js
+    env:
+      WAIT_MS: 5000
+- assertVisible:
+    id: composer
+- runFlow:
+    when:
+      true: ${CAPTURE_EVIDENCE === '1'}
+    commands:
+      - takeScreenshot: before-pans

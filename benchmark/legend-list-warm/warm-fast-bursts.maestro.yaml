@@ -1,0 +1,19 @@
+appId: ${APP_ID}
+name: Warm chat fast released pan bursts
+tags:
+  - performance
+  - fast
+---
+- runFlow: warm-scroll.open-report.maestro.yaml
+# One native input sequence avoids Maestro's per-swipe idle/settle waits.
+# 10 pans at 3500 dp/s, pause 2s; 10 at 5250, pause 2s; 10 at 5250, pause 5s.
+- runScript:
+    file: android-gestures.maestro.js
+    env:
+      SCROLL_FLOW: fast
+- assertTrue: ${output.gestures.status === 'SUCCESS' && output.gestures.panCount === 30}
+- runFlow:
+    when:
+      true: ${CAPTURE_EVIDENCE === '1'}
+    commands:
+      - takeScreenshot: after-pans
