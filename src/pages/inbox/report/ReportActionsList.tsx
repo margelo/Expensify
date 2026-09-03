@@ -619,7 +619,7 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
                 {shouldShowInitialViewportSkeleton && (
                     <View
                         pointerEvents="none"
-                        style={[styles.pAbsolute, styles.t0, styles.r0, styles.b0, styles.l0, styles.appBG, styles.overflowHidden, styles.zIndex10]}
+                        style={[styles.pAbsolute, styles.t0, styles.r0, styles.b0, styles.l0, styles.appBG, styles.overflowHidden, styles.zIndex10, styles.justifyContentEnd, styles.pb4]}
                     >
                         <ReportActionsSkeletonView />
                     </View>
