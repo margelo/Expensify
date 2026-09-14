@@ -5,7 +5,6 @@ import type * as LegendListModule from '@legendapp/list/react-native';
 import type * as FlashListModule from '@shopify/flash-list';
 import type React from 'react';
 import type {ReactNode} from 'react';
-import type React from 'react';
 import type * as RNAppLogs from 'react-native-app-logs';
 import type {ReadDirItem} from 'react-native-fs';
 
