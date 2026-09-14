@@ -1,0 +1,63 @@
+diff --git a/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/EdgeToEdgeReactViewGroup.kt b/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/EdgeToEdgeReactViewGroup.kt
+index a8b8a7a..e227a3e 100644
+--- a/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/EdgeToEdgeReactViewGroup.kt
++++ b/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/EdgeToEdgeReactViewGroup.kt
+@@ -119,13 +119,21 @@ class EdgeToEdgeReactViewGroup(
+           if (!shouldApplyBottomPadding) 0 else insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+ 
+         params.setMargins(
+-          navBarInsets.left,
++          if (this.isNavigationBarTranslucent) {
++            0
++          } else {
++            navBarInsets.left
++          },
+           if (this.isStatusBarTranslucent) {
+             0
+           } else {
+             systemBarInsets.top
+           },
+-          navBarInsets.right,
++          if (this.isNavigationBarTranslucent) {
++            0
++          } else {
++            navBarInsets.right
++          },
+           if (this.isNavigationBarTranslucent) {
+             keyboardInsets
+           } else {
+diff --git a/node_modules/react-native-keyboard-controller/ios/observers/movement/KeyboardTrackingView.swift b/node_modules/react-native-keyboard-controller/ios/observers/movement/KeyboardTrackingView.swift
+index 00a8528..1f695b4 100644
+--- a/node_modules/react-native-keyboard-controller/ios/observers/movement/KeyboardTrackingView.swift
++++ b/node_modules/react-native-keyboard-controller/ios/observers/movement/KeyboardTrackingView.swift
+@@ -140,7 +140,7 @@ public final class KeyboardTrackingView: UIView {
+ 
+     // for `keyboardLayoutGuide` case we can just read keyboard position directly - no interpolation needed
+     if KeyboardControllerConfiguration.usesKeyboardLayoutGuideTracking {
+-      if keyboardPosition > keyboardHeight {
++      if !keyboardPosition.isFinite || keyboardPosition < 0 || keyboardPosition > keyboardHeight {
+         return Self.invalidPosition
+       }
+       // when we are the top position KVO takes `inputAccessoryView` into consideration,
+diff --git a/node_modules/react-native-keyboard-controller/src/animated.tsx b/node_modules/react-native-keyboard-controller/src/animated.tsx
+index 39d5494..18786b9 100644
+--- a/node_modules/react-native-keyboard-controller/src/animated.tsx
++++ b/node_modules/react-native-keyboard-controller/src/animated.tsx
+@@ -178,7 +178,7 @@ export const KeyboardProvider = (props: KeyboardProviderProps) => {
+       onKeyboardMoveEnd: (event: NativeEvent) => {
+         "worklet";
+ 
+-        updateSharedValues(event, ["android"]);
++        updateSharedValues(event, ["android", "ios"]);
+       },
+     },
+     [],
+@@ -226,7 +226,7 @@ export const KeyboardProvider = (props: KeyboardProviderProps) => {
+         onKeyboardMoveStart={OS === "ios" ? onKeyboardMove : undefined}
+         onKeyboardMove={OS === "android" ? onKeyboardMove : undefined}
+         onKeyboardMoveInteractive={onKeyboardMove}
+-        onKeyboardMoveEnd={OS === "android" ? onKeyboardMove : undefined}
++        onKeyboardMoveEnd={onKeyboardMove}
+         onFocusedInputLayoutChangedReanimated={inputLayoutHandler}
+       >
+         {children}

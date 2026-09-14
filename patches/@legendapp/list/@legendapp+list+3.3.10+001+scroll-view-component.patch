@@ -1,8 +1,8 @@
 diff --git a/node_modules/@legendapp/list/keyboard.d.ts b/node_modules/@legendapp/list/keyboard.d.ts
+index 43678c2..759d16d 100644
 --- a/node_modules/@legendapp/list/keyboard.d.ts
 +++ b/node_modules/@legendapp/list/keyboard.d.ts
-@@ -257,7 +257,11 @@ type LegendListRef = Omit<LegendListRef$1, "getAnimatableRef" | "getNativeScro
-     reportContentInset(inset?: Partial<Insets$1> | null): void;
+@@ -260,6 +260,10 @@ type LegendListRef = Omit<LegendListRef$1, "getAnimatableRef" | "getNativeScroll
  };
  
  type KeyboardChatScrollViewPropsUnique = Omit<KeyboardChatScrollViewProps, keyof ScrollViewProps | "inverted" | "ScrollViewComponent" | "blankSpace" | "extraContentPadding" | "onContentInsetChange" | "offset">;
@@ -13,7 +13,7 @@ diff --git a/node_modules/@legendapp/list/keyboard.d.ts b/node_modules/@legendap
  type ScrollMessageToEndOptions = {
      animated: boolean;
      closeKeyboard: boolean;
-@@ -291,6 +295,7 @@ declare const KeyboardAwareLegendList: <ItemT>(props: Omit<AnimatedLegendListPro
+@@ -293,6 +297,7 @@ declare const KeyboardAwareLegendList: <ItemT>(props: Omit<AnimatedLegendListPro
      anchoredEndSpace?: AnchoredEndSpaceConfig;
      contentInsetEndAdjustment?: SharedValue<number>;
      keyboardOffset?: number;
@@ -22,9 +22,18 @@ diff --git a/node_modules/@legendapp/list/keyboard.d.ts b/node_modules/@legendap
  
  export { KeyboardAwareLegendList, useKeyboardChatComposerInset, useKeyboardScrollToEnd };
 diff --git a/node_modules/@legendapp/list/keyboard.js b/node_modules/@legendapp/list/keyboard.js
+index 6645bcb..dda6e20 100644
 --- a/node_modules/@legendapp/list/keyboard.js
 +++ b/node_modules/@legendapp/list/keyboard.js
-@@ -91,6 +91,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+@@ -1,6 +1,7 @@
+ 'use strict';
+ 
+ var React = require('react');
++var reactNative$1 = require('react-native');
+ var reactNativeKeyboardController = require('react-native-keyboard-controller');
+ var reactNativeReanimated = require('react-native-reanimated');
+ var reactNative = require('@legendapp/list/react-native');
+@@ -90,6 +91,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
      freeze,
      keyboardLiftBehavior,
      keyboardOffset,
@@ -32,17 +41,17 @@ diff --git a/node_modules/@legendapp/list/keyboard.js b/node_modules/@legendapp/
      ...rest
    } = props;
    const refLegendList = React.useRef(null);
-@@ -125,7 +126,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+@@ -129,7 +131,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
            freeze,
            keyboardLiftBehavior,
            offset: keyboardOffset,
 -          onContentInsetChange
-+          onContentInsetChange,
++          onContentInsetChange: reactNative$1.Platform.OS === "android" ? onContentInsetChange : void 0,
 +          ScrollViewComponent
          }
        );
      },
-@@ -137,7 +139,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+@@ -140,7 +143,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
        freeze,
        keyboardLiftBehavior,
        keyboardOffset,
@@ -53,9 +62,17 @@ diff --git a/node_modules/@legendapp/list/keyboard.js b/node_modules/@legendapp/
    );
    const AnimatedLegendListInternal = reanimated.AnimatedLegendList;
 diff --git a/node_modules/@legendapp/list/keyboard.mjs b/node_modules/@legendapp/list/keyboard.mjs
+index 87b38b9..8df951a 100644
 --- a/node_modules/@legendapp/list/keyboard.mjs
 +++ b/node_modules/@legendapp/list/keyboard.mjs
-@@ -70,6 +70,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+@@ -1,5 +1,6 @@
+ import * as React from 'react';
+ import { useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
++import { Platform } from 'react-native';
+ import { KeyboardChatScrollView, KeyboardController } from 'react-native-keyboard-controller';
+ import { useSharedValue } from 'react-native-reanimated';
+ import { internal } from '@legendapp/list/react-native';
+@@ -69,6 +70,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
      freeze,
      keyboardLiftBehavior,
      keyboardOffset,
@@ -63,17 +80,17 @@ diff --git a/node_modules/@legendapp/list/keyboard.mjs b/node_modules/@legendapp
      ...rest
    } = props;
    const refLegendList = useRef(null);
-@@ -104,7 +105,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+@@ -108,7 +110,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
            freeze,
            keyboardLiftBehavior,
            offset: keyboardOffset,
 -          onContentInsetChange
-+          onContentInsetChange,
++          onContentInsetChange: Platform.OS === "android" ? onContentInsetChange : void 0,
 +          ScrollViewComponent
          }
        );
      },
-@@ -116,7 +118,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2
+@@ -119,7 +122,8 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
        freeze,
        keyboardLiftBehavior,
        keyboardOffset,
