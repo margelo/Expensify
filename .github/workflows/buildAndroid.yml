@@ -51,7 +51,7 @@ on:
 jobs:
   build:
     name: Build Android app
-    runs-on: blacksmith-32vcpu-ubuntu-2404
+    runs-on: ${{ inputs.variant == 'Release' && 'pgo-android' || 'blacksmith-32vcpu-ubuntu-2404' }}
     env:
       PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
     outputs:
@@ -160,13 +160,40 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Train Android PGO on the signed-in physical device
+        if: ${{ inputs.variant == 'Release' }}
+        env:
+          SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+          SENTRY_DISABLE_NATIVE_DEBUG_UPLOAD: 'true'
+        run: |
+          set -euo pipefail
+          : "${PGO_ANDROID_DEVICE_ID:?Set PGO_ANDROID_DEVICE_ID on the device runner}"
+          : "${PGO_JOURNEY_FIXTURE:?Set PGO_JOURNEY_FIXTURE to an owner-approved heavy-account fixture}"
+          test -s "$PGO_JOURNEY_FIXTURE"
+          command -v agent-device
+          test "$(agent-device --version)" = '0.20.6'
+          test -d "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to the pinned NDK}"
+          ./node_modules/.bin/bun scripts/pgo/pgo.ts android build-instrumented --device "$PGO_ANDROID_DEVICE_ID"
+          ./node_modules/.bin/bun scripts/pgo/pgo.ts android verify-instrumented --device "$PGO_ANDROID_DEVICE_ID"
+          ./node_modules/.bin/bun scripts/pgo/pgo.ts android install-instrumented --device "$PGO_ANDROID_DEVICE_ID"
+          batch_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ./node_modules/.bin/bun scripts/pgo/journey.ts android --fixture "$PGO_JOURNEY_FIXTURE" --device "$PGO_ANDROID_DEVICE_ID" --preflight --batch-id "${batch_id}-preflight"
+          ./node_modules/.bin/bun scripts/pgo/journey.ts android --fixture "$PGO_JOURNEY_FIXTURE" --device "$PGO_ANDROID_DEVICE_ID" --runs 3 --collect --batch-id "$batch_id"
+
+      - name: Validate Android training profile
+        id: preparePgo
+        if: ${{ inputs.variant == 'Release' }}
+        run: ./node_modules/.bin/bun scripts/pgo/ciProfile.ts prepare android "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
       - name: Rock Remote Build - Android
         uses: callstackincubator/android@4cedf4d9b5c167452c96fe67233577e0fde9a025
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           IS_HYBRID_APP: true
-          FORCE_NATIVE_BUILD: ${{ inputs.force-native-build == 'true' && github.run_id || '' }}
+          FORCE_NATIVE_BUILD: ${{ inputs.variant == 'Release' && format('{0}-{1}', github.run_id, github.run_attempt) || inputs.force-native-build == 'true' && github.run_id || '' }}
+          EXPENSIFY_PGO_MODE: ${{ inputs.variant == 'Release' && 'use' || 'off' }}
+          PGO_PROFILE_SHA256: ${{ steps.preparePgo.outputs.PROFILE_SHA256 }}
         with:
           variant: ${{ inputs.variant }}
           aab: ${{ inputs.variant == 'Release' }}
@@ -182,7 +209,7 @@ jobs:
           keystore-key-password: ${{ steps.load-credentials.outputs.ANDROID_UPLOAD_KEY_PASSWORD }}
           keystore-path: '../tools/buildtools/upload-key.keystore'
           comment-bot: false
-          rock-build-extra-params: ${{ inputs.variant == 'Adhoc' && '--extra-params "-PreactNativeArchitectures=arm64-v8a,x86_64 --profile"' || '--extra-params "--profile"' }}
+          rock-build-extra-params: ${{ inputs.variant == 'Release' && format('--local --extra-params "-PpgoMode=use -PpgoProfile={0} -PpatchedArtifacts.forceBuildFromSource=true --no-build-cache --rerun-tasks --profile"', steps.preparePgo.outputs.PROFILE_PATH) || '--extra-params "-PreactNativeArchitectures=arm64-v8a,x86_64 --profile"' }}
           custom-identifier: ${{ steps.computeIdentifier.outputs.IDENTIFIER }}
           validate-elf-alignment: ${{ inputs.variant != 'Release' && 'true' || 'false' }}
 
@@ -242,6 +269,18 @@ jobs:
         with:
           name: ${{ inputs.artifact-prefix }}androidBuild-artifact
           path: /tmp/android-artifacts/*.aab
+
+      - name: Seal Android PGO release proof
+        if: ${{ inputs.variant == 'Release' }}
+        run: ./node_modules/.bin/bun scripts/pgo/ciProfile.ts seal android "$(jq -r .version package.json)" "/tmp/android-artifacts/${{ steps.collectArtifacts.outputs.AAB_FILENAME }}" /tmp/android-artifacts/pgo-proof-android.json
+
+      - name: Upload Android PGO release proof
+        if: ${{ inputs.variant == 'Release' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ${{ inputs.artifact-prefix }}pgo-proof-android
+          path: /tmp/android-artifacts/pgo-proof-android.json
+          if-no-files-found: error
 
       - name: Upload Android sourcemap artifact
         # v6
