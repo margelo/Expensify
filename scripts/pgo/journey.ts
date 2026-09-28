@@ -3,7 +3,7 @@
 // cspell:ignore profraw profdata
 
 import CLI from 'expensify-common/CLI';
-import {copyFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join, relative, resolve} from 'node:path';
 
 import type {PlatformName} from '../lib/nativeAppBenchmark';
@@ -26,6 +26,7 @@ async function main(): Promise<void> {
             device: {description: 'Android serial or iOS UDID'},
             'app-id': {description: 'Installed application or bundle identifier'},
             runs: {description: 'Complete journeys to run', default: 1, parse: (value) => parsePositiveInteger(value, 'Runs')},
+            'batch-id': {description: 'Unique output directory name for CI; defaults to the current timestamp'},
         },
         flags: {
             collect: {description: 'Flush, archive, and merge LLVM profiles from an already-installed instrumented app'},
@@ -44,8 +45,14 @@ async function main(): Promise<void> {
         throw new Error('Confirm the personal chat with Chris before setting allowMessages=true in the fixture. Use --navigation-only to validate without sending.');
     }
     const runs = parsePositiveInteger(String(cli.namedArgs.runs), 'Runs');
-    const batchID = new Date().toISOString().replaceAll(/[:.]/g, '-');
+    const batchID = cli.namedArgs['batch-id'] ?? new Date().toISOString().replaceAll(/[:.]/g, '-');
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(batchID)) {
+        throw new Error('Batch ID must contain only letters, numbers, hyphens, and underscores.');
+    }
     const batchDirectory = join(rootDirectory, '.pgo', platform, 'journeys', batchID);
+    if (existsSync(batchDirectory)) {
+        throw new Error(`Journey batch already exists: ${batchDirectory}`);
+    }
     mkdirSync(batchDirectory, {recursive: true});
     const device = createJourneyDevice({platform, device: cli.namedArgs.device, appID: cli.namedArgs['app-id'], session: `pgo-${platform}-${batchID}`});
     const adapter = platform === 'android' ? createAndroidPgoAdapter(cli.namedArgs['app-id'], cli.namedArgs.device) : createIOSPgoAdapter(cli.namedArgs['app-id'], cli.namedArgs.device);
