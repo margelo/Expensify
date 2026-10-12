@@ -1,36 +1,41 @@
+import MultiAccountAvatar from '@components/Avatar/connected/MultiAccountAvatar';
+import {AvatarTooltipsProvider} from '@components/Avatar/tooltips/AvatarTooltipContext';
 import FormProvider from '@components/Form/FormProvider';
 import InputWrapper from '@components/Form/InputWrapper';
 import type {FormInputErrors} from '@components/Form/types';
 import HeaderWithBackButton from '@components/HeaderWithBackButton';
-import MenuItemWithTopDescription from '@components/MenuItemWithTopDescription';
+import MenuItemField from '@components/MenuItem/presets/MenuItemField';
 import PressableWithoutFeedback from '@components/Pressable/PressableWithoutFeedback';
-import ReportActionAvatars from '@components/ReportActionAvatars';
 import type {AnimatedTextInputRef} from '@components/RNTextInput';
 import ScreenWrapper from '@components/ScreenWrapper';
 import Text from '@components/Text';
 import TextInput from '@components/TextInput';
 
+import useApprovalWorkflows from '@hooks/useApprovalWorkflows';
 import useAutoFocusInput from '@hooks/useAutoFocusInput';
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
+import usePermissions from '@hooks/usePermissions';
+import usePersonalDetailByLogin, {usePersonalDetailsByLogins} from '@hooks/usePersonalDetailByLogin';
+import {useAllPersonalDetails} from '@hooks/usePersonalDetails';
 import useThemeStyles from '@hooks/useThemeStyles';
 
 import {clearDraftValues} from '@libs/actions/FormActions';
 import {openExternalLink} from '@libs/actions/Link';
 import {addMembersToWorkspace, clearWorkspaceInviteApproverDraft, clearWorkspaceInviteRoleDraft} from '@libs/actions/Policy/Member';
 import {setWorkspaceInviteMessageDraft} from '@libs/actions/Policy/Policy';
+import {saveFastEditApprovalWorkflow} from '@libs/actions/Workflow';
 import createDynamicRoute from '@libs/Navigation/helpers/dynamicRoutesUtils/createDynamicRoute';
 import Navigation from '@libs/Navigation/Navigation';
-import {getPersonalDetailsForAccountIDs} from '@libs/OptionsListUtils';
-import {getNewAccountIDsAndLogins, getPersonalDetailByEmail, getPersonalDetailsOnyxDataForOptimisticUsers, temporaryGetDisplayNameOrDefault} from '@libs/PersonalDetailsUtils';
+import {getNewAccountIDsAndLogins, getPersonalDetailsForAccountIDs, getPersonalDetailsOnyxDataForOptimisticUsers, temporaryGetDisplayNameOrDefault} from '@libs/PersonalDetailsUtils';
 import {
     canMemberAssignElevatedRole,
     canMemberAssignRole,
     getDefaultApprover,
     getMemberAccountIDsForWorkspace,
     goBackFromInvalidPolicy,
-    isControlPolicy,
     isSubmitPolicy,
+    shouldHideDynamicExternalWorkflowPeople,
     tryNavigateToSubmitWorkspaceUpgrade,
 } from '@libs/PolicyUtils';
 import {getAllPolicyExpenseChatReportActions} from '@libs/ReportUtils';
@@ -82,6 +87,7 @@ function WorkspaceInviteMessageComponent({
 }: WorkspaceInviteMessageComponentProps) {
     const styles = useThemeStyles();
     const {translate, formatPhoneNumber} = useLocalize();
+    const {isBetaEnabled} = usePermissions();
     const policyName = policy?.name;
 
     const backToPath = typeof backTo === 'string' ? (backTo.split('?').at(0) ?? '') : '';
@@ -90,9 +96,11 @@ function WorkspaceInviteMessageComponent({
     const subtitle = isWorkflowApprovalExpensesFromRoute ? undefined : policyName;
 
     const [formData, formDataResult] = useOnyx(ONYXKEYS.FORMS.WORKSPACE_INVITE_MESSAGE_FORM_DRAFT);
-    const [allPersonalDetails] = useOnyx(ONYXKEYS.PERSONAL_DETAILS_LIST);
+    const [allPersonalDetails] = useAllPersonalDetails();
     const [allReports] = useOnyx(ONYXKEYS.COLLECTION.REPORT);
     const [allReportActions] = useOnyx(ONYXKEYS.COLLECTION.REPORT_ACTIONS);
+    // Only used when this page finishes a "+N more" workflow edit, which has no edit page behind it to save the workflow.
+    const [approvalWorkflow] = useOnyx(ONYXKEYS.APPROVAL_WORKFLOW);
 
     const [welcomeNote, setWelcomeNote] = useState<string>();
 
@@ -113,10 +121,13 @@ function WorkspaceInviteMessageComponent({
     const defaultApprover = getDefaultApprover(policy);
     const [approverDraft] = useOnyx(`${ONYXKEYS.COLLECTION.WORKSPACE_INVITE_APPROVER_DRAFT}${policyID}`);
     const workspaceInviteApproverDraft = approverDraft ?? defaultApprover;
-    const approverDetails = getPersonalDetailByEmail(workspaceInviteApproverDraft);
+    const approverDetails = usePersonalDetailByLogin(workspaceInviteApproverDraft);
+    const employeePersonalDetails = usePersonalDetailsByLogins(Object.keys(policy?.employeeList ?? {}));
 
-    const isControl = isControlPolicy(policy);
-    const shouldShowApproverRow = isControl && policy?.approvalMode === CONST.POLICY.APPROVAL_MODE.ADVANCED && policy?.areWorkflowsEnabled;
+    // `approvalMode` can drift from the actual workflow structure because it is updated optimistically.
+    // Dynamic external workflows that hide people also have no selectable approver.
+    const {isAdvanceApproval, rulesCollection} = useApprovalWorkflows(policy);
+    const shouldShowApproverRow = isAdvanceApproval && !!policy?.areWorkflowsEnabled && !shouldHideDynamicExternalWorkflowPeople(policy);
 
     const isApproverValid = !!workspaceInviteApproverDraft && workspaceInviteApproverDraft in (policy?.employeeList ?? {});
     const validatedApprover = isApproverValid ? workspaceInviteApproverDraft : undefined;
@@ -130,7 +141,7 @@ function WorkspaceInviteMessageComponent({
     const personalDetailsOfInvitedEmails = getPersonalDetailsForAccountIDs(Object.values(invitedEmailsToAccountIDsDraft ?? {}), allPersonalDetails ?? {});
     const memberNames = Object.values(personalDetailsOfInvitedEmails)
         .map((personalDetail) => {
-            const displayName = temporaryGetDisplayNameOrDefault({passedPersonalDetails: personalDetail, defaultValue: '', shouldFallbackToHidden: false, translate});
+            const displayName = temporaryGetDisplayNameOrDefault({passedPersonalDetails: personalDetail, defaultValue: '', shouldFallbackToHidden: false, translate, formatPhoneNumber});
             if (displayName) {
                 return displayName;
             }
@@ -181,7 +192,7 @@ function WorkspaceInviteMessageComponent({
     const sendInvitation = () => {
         Keyboard.dismiss();
         const filteredReportActions = getAllPolicyExpenseChatReportActions(allReports, allReportActions);
-        const policyMemberAccountIDs = Object.values(getMemberAccountIDsForWorkspace(policy?.employeeList, false, false));
+        const policyMemberAccountIDs = Object.values(getMemberAccountIDsForWorkspace(policy?.employeeList, employeePersonalDetails, false, false));
         const {newAccountIDs, newLogins} = getNewAccountIDsAndLogins(invitedEmailsToAccountIDsDraft, allPersonalDetails);
         // Please see https://github.com/Expensify/App/blob/main/README.md#Security for more details
         // See https://github.com/Expensify/App/blob/main/README.md#workspace, we set conditions about who can leave the workspace
@@ -213,6 +224,22 @@ function WorkspaceInviteMessageComponent({
             const nestedBackTo = getSearchParamFromPath(backTo?.toString() ?? '', 'backTo');
             if (nestedBackTo) {
                 Navigation.goBack(nestedBackTo as Routes);
+            } else if (approvalWorkflow?.isFastEdit) {
+                const invitedEmails = new Set(Object.keys(invitedEmailsToAccountIDsDraft ?? {}));
+                const shouldExcludeInvitedMembers = shouldShowApproverRow && !!approverDraft && !!validatedApprover && validatedApprover !== approvalWorkflow.approvers.at(0)?.email;
+                // An explicit approver choice owns the invited members. Saving them with the edited workflow would overwrite that choice.
+                const approvalWorkflowToSave = shouldExcludeInvitedMembers
+                    ? {...approvalWorkflow, members: approvalWorkflow.members.filter((member) => !invitedEmails.has(member.email))}
+                    : approvalWorkflow;
+                Navigation.goBack(ROUTES.WORKSPACE_WORKFLOWS.getRoute(policyID), {
+                    afterTransition: () =>
+                        saveFastEditApprovalWorkflow({
+                            approvalWorkflow: approvalWorkflowToSave,
+                            policy,
+                            rules: rulesCollection,
+                            isMultipleApproversBetaEnabled: isBetaEnabled(CONST.BETAS.MULTIPLE_APPROVERS),
+                        }),
+                });
             } else {
                 // forceReplace so the invite page is removed from the stack. Otherwise it stays
                 // underneath the Approver page and an iOS swipe-back reopens the invite confirm page.
@@ -246,8 +273,16 @@ function WorkspaceInviteMessageComponent({
     };
 
     const invitingMemberEmail = Object.keys(invitedEmailsToAccountIDsDraft ?? {}).at(0) ?? '';
-    const invitingMemberDetails = getPersonalDetailByEmail(invitingMemberEmail);
+    const invitingMemberDetails = usePersonalDetailByLogin(invitingMemberEmail);
     const invitingMemberName = Str.removeSMSDomain(invitingMemberDetails?.displayName ?? '');
+    const invitingMemberTitle = invitingMemberName && invitingMemberName !== invitingMemberEmail ? invitingMemberName : invitingMemberEmail;
+    const approverName = temporaryGetDisplayNameOrDefault({
+        passedPersonalDetails: approverDetails,
+        defaultValue: workspaceInviteApproverDraft,
+        shouldFallbackToHidden: false,
+        translate,
+        formatPhoneNumber,
+    });
 
     useEffect(() => {
         return () => {
@@ -291,61 +326,54 @@ function WorkspaceInviteMessageComponent({
                         <Text style={[styles.textHeadlineLineHeightXXL, styles.mv3]}>{translate('workspace.card.issueNewCard.inviteNewMember')}</Text>
                     )}
                     <View style={[styles.mv4, styles.justifyContentCenter, styles.alignItemsCenter]}>
-                        <ReportActionAvatars
-                            size={CONST.AVATAR_SIZE.XXX_LARGE}
-                            accountIDs={Object.values(invitedEmailsToAccountIDsDraft ?? {})}
-                            horizontalStacking={{
-                                displayInRows: true,
-                            }}
-                            secondaryAvatarContainerStyle={styles.secondAvatarInline}
-                            invitedEmailsToAccountIDs={invitedEmailsToAccountIDsDraft}
-                            shouldUseCustomFallbackAvatar
-                            shouldShowTooltip={shouldShowTooltip}
-                        />
+                        <AvatarTooltipsProvider isEnabled={shouldShowTooltip}>
+                            <MultiAccountAvatar
+                                size={CONST.AVATAR_SIZE.XXX_LARGE}
+                                accountIDs={Object.values(invitedEmailsToAccountIDsDraft ?? {})}
+                                horizontalOptions={{
+                                    maxRows: 2,
+                                }}
+                                invitedEmailsToAccountIDs={invitedEmailsToAccountIDsDraft}
+                            />
+                        </AvatarTooltipsProvider>
                     </View>
-                    <View style={[styles.mb3]}>
+                    <View style={styles.mb3}>
                         <View style={[styles.mhn5, styles.mb3]}>
                             {isInviteNewMemberStep && (
-                                <MenuItemWithTopDescription
-                                    title={invitingMemberName && invitingMemberName !== invitingMemberEmail ? invitingMemberName : invitingMemberEmail}
-                                    description={translate('common.member')}
-                                    interactive={false}
+                                <MenuItemField
+                                    name={translate('common.member')}
+                                    value={invitingMemberTitle}
                                 />
                             )}
                             {shouldShowMemberNames && !isInviteNewMemberStep && (
-                                <MenuItemWithTopDescription
-                                    title={memberNames}
-                                    description={translate('common.members')}
-                                    numberOfLinesTitle={2}
-                                    shouldShowRightIcon
+                                <MenuItemField
+                                    name={translate('common.members')}
+                                    value={memberNames}
+                                    numberOfLinesValue={2}
                                     onPress={() => {
                                         Navigation.goBack(backTo);
                                     }}
                                 />
                             )}
-                            <MenuItemWithTopDescription
-                                title={translate(`workspace.common.roleName`, workspaceInviteRoleDraft)}
-                                description={translate('common.role')}
-                                shouldShowRightIcon={canChangeInviteRole}
-                                interactive={canChangeInviteRole}
-                                onPress={() => {
-                                    if (tryNavigateToSubmitWorkspaceUpgrade(policy, true, CONST.UPGRADE_FEATURE_INTRO_MAPPING.roles.alias, Navigation.getActiveRoute())) {
-                                        return;
-                                    }
-                                    Navigation.navigate(createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_INVITE_MESSAGE_ROLE.path));
-                                }}
+                            <MenuItemField
+                                name={translate('common.role')}
+                                onPress={
+                                    canChangeInviteRole
+                                        ? () => {
+                                              if (tryNavigateToSubmitWorkspaceUpgrade(policy, true, CONST.UPGRADE_FEATURE_INTRO_MAPPING.roles.alias, Navigation.getActiveRoute())) {
+                                                  return;
+                                              }
+                                              Navigation.navigate(createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_INVITE_MESSAGE_ROLE.path));
+                                          }
+                                        : undefined
+                                }
+                                value={translate(`workspace.common.roleName`, workspaceInviteRoleDraft)}
                             />
                             {!!shouldShowApproverRow && (
-                                <MenuItemWithTopDescription
-                                    title={temporaryGetDisplayNameOrDefault({
-                                        passedPersonalDetails: approverDetails,
-                                        defaultValue: workspaceInviteApproverDraft,
-                                        shouldFallbackToHidden: false,
-                                        translate,
-                                    })}
-                                    description={translate('workflowsPage.approver')}
-                                    shouldShowRightIcon
+                                <MenuItemField
+                                    name={translate('workflowsPage.approver')}
                                     onPress={navigateToApproverPage}
+                                    value={approverName}
                                 />
                             )}
                         </View>

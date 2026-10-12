@@ -2,12 +2,11 @@ import useHasTeam2025Pricing from '@hooks/useHasTeam2025Pricing';
 import {useMemoizedLazyExpensifyIcons, useMemoizedLazyIllustrations} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
-import usePermissions from '@hooks/usePermissions';
 import usePreferredCurrency from '@hooks/usePreferredCurrency';
 import useThemeStyles from '@hooks/useThemeStyles';
 
 import {convertToShortDisplayString} from '@libs/CurrencyUtils';
-import {canAccessSubmitWorkspaceFeatures} from '@libs/PolicyUtils';
+import {isSubmitPolicy} from '@libs/PolicyUtils';
 
 import CONST, {SUBMIT_FEATURE_IDS} from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
@@ -39,15 +38,12 @@ type Props = {
 function UpgradeIntro({feature, onUpgrade, buttonDisabled, loading, isCategorizing, isDistanceRateUpgrade, isReporting, policyID, backTo, upgradePlanType}: Props) {
     const styles = useThemeStyles();
     const [policy] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY}${policyID}`);
-    const {isBetaEnabled} = usePermissions();
-    const isSubmit2026BetaEnabled = isBetaEnabled(CONST.BETAS.SUBMIT_2026);
-    const isRulesRevampEnabled = isBetaEnabled(CONST.BETAS.RULES_REVAMP);
-    const isSubmitPolicy = canAccessSubmitWorkspaceFeatures(policy, isSubmit2026BetaEnabled);
+    const isCurrentPolicySubmit = isSubmitPolicy(policy);
     const {translate} = useLocalize();
     const preferredCurrency = usePreferredCurrency();
     const hasTeam2025Pricing = useHasTeam2025Pricing();
 
-    const isSubmitFeature = isSubmitPolicy && !!feature?.id && SUBMIT_FEATURE_IDS.has(feature.id);
+    const isSubmitFeature = isCurrentPolicySubmit && !!feature?.id && SUBMIT_FEATURE_IDS.has(feature.id);
 
     const formattedPrice = useMemo(() => {
         const upgradeCurrency = Object.hasOwn(CONST.SUBSCRIPTION_PRICES, preferredCurrency) ? preferredCurrency : CONST.PAYMENT_CARD_CURRENCY.USD;
@@ -82,8 +78,22 @@ function UpgradeIntro({feature, onUpgrade, buttonDisabled, loading, isCategorizi
         'InvoiceBlue',
         'Members',
         'Approval',
+        'NewUser',
     ]);
-    const illustrationIcons = useMemoizedLazyExpensifyIcons(['IntacctSquare', 'NetSuiteSquare', 'QBDSquare', 'CertiniaSquare', 'RilletSquare', 'AdvancedApprovalsSquare', 'Unlock']);
+    const illustrationIcons = useMemoizedLazyExpensifyIcons([
+        'IntacctSquare',
+        'IntuitSquare',
+        'NetSuiteSquare',
+        'QBDSquare',
+        'QBOSquare',
+        'CertiniaSquare',
+        'RilletSquare',
+        'DualEntrySquare',
+        'CampfireSquare',
+        'BusinessCentralSquare',
+        'AdvancedApprovalsSquare',
+        'Unlock',
+    ]);
     const imported = new Set([...Object.keys(illustrations), ...Object.keys(illustrationIcons)]);
     const missing = allIconNames.filter((n): n is string => !!n && !imported.has(n));
     if (missing.length) {
@@ -96,8 +106,9 @@ function UpgradeIntro({feature, onUpgrade, buttonDisabled, loading, isCategorizi
      * However, the policyID check is only necessary when the user is not coming from the "Categorize" option.
      * The "isCategorizing" flag is set to true when the user accesses the "Categorize" option in the Self-DM whisper.
      * In such scenarios, a separate Categories upgrade UI is displayed.
+     * Auto-pay approved reports requires Control but not advanced approvals, so it also uses the generic Control upgrade view.
      */
-    if (!feature || (!isCategorizing && !isDistanceRateUpgrade && !isReporting && !policyID)) {
+    if (!feature || feature.id === CONST.UPGRADE_FEATURE_INTRO_MAPPING.autoPayApprovedReports.id || (!isCategorizing && !isDistanceRateUpgrade && !isReporting && !policyID)) {
         return (
             <GenericFeaturesView
                 onUpgrade={onUpgrade}
@@ -124,10 +135,10 @@ function UpgradeIntro({feature, onUpgrade, buttonDisabled, loading, isCategorizi
 
     const getOnlyAvailableOnPlanHTML = () => {
         const planParams = {formattedPrice, hasTeam2025Pricing};
-        if (feature.id === 'preventSelfApproval' || feature.id === 'autoApproveCompliantReports' || feature.id === 'autoPayApprovedReports') {
+        if (feature.id === CONST.UPGRADE_FEATURE_INTRO_MAPPING.preventSelfApproval.id || feature.id === CONST.UPGRADE_FEATURE_INTRO_MAPPING.autoApproveCompliantReports.id) {
             return translate('workspace.upgrade.approvals.onlyAvailableOnPlan', planParams);
         }
-        if (feature.id === CONST.UPGRADE_FEATURE_INTRO_MAPPING.rules.id && isRulesRevampEnabled) {
+        if (feature.id === CONST.UPGRADE_FEATURE_INTRO_MAPPING.rules.id) {
             return translate('workspace.upgrade.rules.onlyAvailableOnPlanUnlimited', planParams);
         }
         return translate(`workspace.upgrade.${feature.id}.onlyAvailableOnPlan`, planParams);
@@ -136,7 +147,9 @@ function UpgradeIntro({feature, onUpgrade, buttonDisabled, loading, isCategorizi
     const onlyAvailableOnPlanHTML = getOnlyAvailableOnPlanHTML();
 
     const buttonText =
-        isSubmitPolicy && feature.id === CONST.UPGRADE_FEATURE_INTRO_MAPPING.expensifyCard.id ? translate('workspace.upgrade.expensifyCard.upgradeButton') : translate('common.upgrade');
+        isCurrentPolicySubmit && feature.id === CONST.UPGRADE_FEATURE_INTRO_MAPPING.expensifyCard.id
+            ? translate('workspace.upgrade.expensifyCard.upgradeButton')
+            : translate('common.upgrade');
 
     return (
         <UpgradeIntroView

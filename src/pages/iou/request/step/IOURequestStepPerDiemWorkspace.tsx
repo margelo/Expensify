@@ -1,11 +1,13 @@
+import ActivityIndicator from '@components/ActivityIndicator';
 import FullPageOfflineBlockingView from '@components/BlockingViews/FullPageOfflineBlockingView';
-import FullScreenLoadingIndicator from '@components/FullscreenLoadingIndicator';
 
+import {useCurrencyListActions} from '@hooks/useCurrencyList';
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import useDefaultExpensePolicy from '@hooks/useDefaultExpensePolicy';
 import useNetwork from '@hooks/useNetwork';
 import useOnyx from '@hooks/useOnyx';
 import usePersonalPolicy from '@hooks/usePersonalPolicy';
+import useThemeStyles from '@hooks/useThemeStyles';
 
 import {fetchPerDiemRates} from '@libs/actions/Policy/PerDiem';
 import {getInitialPerDiemTargetReport} from '@libs/IOUUtils';
@@ -13,7 +15,6 @@ import createDynamicRoute from '@libs/Navigation/helpers/dynamicRoutesUtils/crea
 import Navigation from '@libs/Navigation/Navigation';
 import {getActivePoliciesWithExpenseChatAndPerDiemEnabled, getPerDiemCustomUnit} from '@libs/PolicyUtils';
 import {findSelfDMReportID, getPolicyExpenseChat} from '@libs/ReportUtils';
-import type {SkeletonSpanReasonAttributes} from '@libs/telemetry/useSkeletonSpan';
 
 import {setCustomUnitID, setMoneyRequestCategory, setMoneyRequestParticipants, setMoneyRequestParticipantsFromReport} from '@userActions/IOU/MoneyRequest';
 import {setTransactionReport} from '@userActions/Transaction';
@@ -27,6 +28,7 @@ import type {Policy} from '@src/types/onyx';
 import type {OnyxEntry} from 'react-native-onyx';
 
 import React, {useEffect, useState} from 'react';
+import {View} from 'react-native';
 
 import type {WithFullTransactionOrNotFoundProps} from './withFullTransactionOrNotFound';
 
@@ -36,6 +38,8 @@ import withFullTransactionOrNotFound from './withFullTransactionOrNotFound';
 type IOURequestStepPerDiemWorkspaceProps = WithFullTransactionOrNotFoundProps<typeof SCREENS.MONEY_REQUEST.CREATE>;
 
 function IOURequestStepPerDiemWorkspace({route, navigation, transaction}: IOURequestStepPerDiemWorkspaceProps) {
+    const styles = useThemeStyles();
+    const {getCurrencyDecimals} = useCurrencyListActions();
     const {
         params: {action, iouType, transactionID},
     } = route;
@@ -88,7 +92,8 @@ function IOURequestStepPerDiemWorkspace({route, navigation, transaction}: IOUReq
             ]);
         }
         setCustomUnitID(transactionID, perDiemUnit?.customUnitID ?? CONST.CUSTOM_UNITS.FAKE_P2P_ID);
-        setMoneyRequestCategory(transactionID, perDiemUnit?.defaultCategory ?? '', undefined);
+        setMoneyRequestCategory(transactionID, perDiemUnit?.defaultCategory ?? '', undefined, getCurrencyDecimals);
+
         Navigation.navigate(
             createDynamicRoute(DYNAMIC_ROUTES.MONEY_REQUEST_STEP_DESTINATION.path, ROUTES.MONEY_REQUEST_CREATE.getRoute(action, targetIouType, transactionID, targetReport.reportID)),
         );
@@ -107,8 +112,11 @@ function IOURequestStepPerDiemWorkspace({route, navigation, transaction}: IOUReq
         if (isOffline) {
             return <FullPageOfflineBlockingView>{null}</FullPageOfflineBlockingView>;
         }
-        const reasonAttributes: SkeletonSpanReasonAttributes = {context: 'IOURequestStepPerDiemWorkspace', pendingPolicyID};
-        return <FullScreenLoadingIndicator reasonAttributes={reasonAttributes} />;
+        return (
+            <View style={[styles.flex1, styles.fullScreenLoading]}>
+                <ActivityIndicator size={CONST.ACTIVITY_INDICATOR_SIZE.LARGE} />
+            </View>
+        );
     }
 
     return (

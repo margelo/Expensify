@@ -14,7 +14,7 @@ import {setAddNewPersonalCardStepAndData} from '@libs/actions/PersonalCards';
 import getPlaidOAuthReceivedRedirectURI from '@libs/getPlaidOAuthReceivedRedirectURI';
 import KeyboardShortcut from '@libs/KeyboardShortcut';
 import Log from '@libs/Log';
-import type {SkeletonSpanReasonAttributes} from '@libs/telemetry/useSkeletonSpan';
+import getPlaidInstitutionID from '@libs/PlaidUtils';
 
 import Navigation from '@navigation/Navigation';
 
@@ -63,16 +63,9 @@ function PlaidLinkContent({plaidLinkToken, plaidDataErrorMessage, plaidData, onS
         return <Text style={[styles.formError, styles.mh5]}>{plaidDataErrorMessage}</Text>;
     }
     if (plaidData?.isLoading) {
-        const reasonAttributes: SkeletonSpanReasonAttributes = {
-            context: 'PersonalCardPlaidConnectionStep.renderPlaidLink',
-            isPlaidDataLoading: plaidData?.isLoading,
-        };
         return (
             <View style={[styles.flex1, styles.alignItemsCenter, styles.justifyContentCenter]}>
-                <ActivityIndicator
-                    size={CONST.ACTIVITY_INDICATOR_SIZE.LARGE}
-                    reasonAttributes={reasonAttributes}
-                />
+                <ActivityIndicator size={CONST.ACTIVITY_INDICATOR_SIZE.LARGE} />
             </View>
         );
     }
@@ -92,7 +85,6 @@ function PlaidConnectionStep({feed, onExit}: {feed?: CompanyCardFeedWithDomainID
     const previousNetworkState = useRef<boolean | undefined>(undefined);
     const plaidDataErrorMessage = !isEmptyObject(plaidErrors) && Object.values(plaidErrors) ? (Object.values(plaidErrors).at(0) ?? '') : '';
     const {isOffline} = useNetwork();
-    const isAuthenticatedWithPlaid = !!plaidData?.bankAccounts?.length || !isEmptyObject(plaidData?.errors);
 
     /**
      * Blocks the keyboard shortcuts that can navigate
@@ -125,27 +117,25 @@ function PlaidConnectionStep({feed, onExit}: {feed?: CompanyCardFeedWithDomainID
     useEffect(() => {
         subscribeToNavigationShortcuts();
 
-        // If we're coming from Plaid OAuth flow then we need to reuse the existing plaidLinkToken
-        if (isAuthenticatedWithPlaid) {
-            return unsubscribeToNavigationShortcuts;
-        }
+        // Always request a fresh link token. The response re-derives isPlaidDisabled from the server-side throttle state,
+        // so any error or throttle state left in Onyx by an earlier attempt is replaced instead of trusted.
         if (addNewPersonalCard?.data?.selectedCountry) {
             openPlaidCompanyCardLogin(addNewPersonalCard.data.selectedCountry, '', feed, true);
-            return unsubscribeToNavigationShortcuts;
         }
+        return unsubscribeToNavigationShortcuts;
 
         // disabling this rule, as we want this to run only on the first render
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
-        // If we are coming back from offline and we haven't authenticated with Plaid yet, we need to re-run our call to kick off Plaid
+        // If we are coming back from offline we need to re-run our call to kick off Plaid
         // previousNetworkState.current also makes sure that this doesn't run on the first render.
-        if (previousNetworkState.current && !isOffline && !isAuthenticatedWithPlaid && addNewPersonalCard?.data?.selectedCountry) {
+        if (previousNetworkState.current && !isOffline && addNewPersonalCard?.data?.selectedCountry) {
             openPlaidCompanyCardLogin(addNewPersonalCard.data.selectedCountry, '', feed, true);
         }
         previousNetworkState.current = isOffline;
-    }, [addNewPersonalCard?.data?.selectedCountry, feed, isAuthenticatedWithPlaid, isOffline]);
+    }, [addNewPersonalCard?.data?.selectedCountry, feed, isOffline]);
 
     const handleBackButtonPress = () => {
         if (feed) {
@@ -162,8 +152,9 @@ function PlaidConnectionStep({feed, onExit}: {feed?: CompanyCardFeedWithDomainID
         // on success we need to move to bank connection screen with token, bank name = plaid
         Log.info('[PlaidLink] Success!');
 
-        const plaidConnectedFeed = (metadata?.institution as PlaidLinkOnSuccessMetadata['institution'])?.institution_id ?? (metadata?.institution as LinkSuccessMetadata['institution'])?.id;
-        const plaidConnectedFeedName = (metadata?.institution as PlaidLinkOnSuccessMetadata['institution'])?.name ?? (metadata?.institution as LinkSuccessMetadata['institution'])?.name;
+        const institution = metadata.institution;
+        const plaidConnectedFeed = getPlaidInstitutionID(institution);
+        const plaidConnectedFeedName = institution?.name;
 
         setAddNewPersonalCardStepAndData({
             step: CONST.PERSONAL_CARDS.STEP.BANK_CONNECTION,
@@ -171,7 +162,7 @@ function PlaidConnectionStep({feed, onExit}: {feed?: CompanyCardFeedWithDomainID
                 publicToken,
                 plaidConnectedFeed,
                 plaidConnectedFeedName,
-                plaidAccounts: metadata?.accounts,
+                plaidAccounts: metadata.accounts,
             },
         });
     };

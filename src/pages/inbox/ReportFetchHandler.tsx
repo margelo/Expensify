@@ -1,5 +1,9 @@
+import {usePersonalDetails} from '@components/OnyxListItemProvider';
+
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import useIsAnonymousUser from '@hooks/useIsAnonymousUser';
+import useIsHiddenWideTabPreMount from '@hooks/useIsHiddenWideTabPreMount';
+import useIsInPreloadedTab from '@hooks/useIsInPreloadedTab';
 import useIsInSidePanel from '@hooks/useIsInSidePanel';
 import useIsOwnWorkspaceChatRef from '@hooks/useIsOwnWorkspaceChatRef';
 import useIsReportActionsLoaded from '@hooks/useIsReportActionsLoaded';
@@ -9,6 +13,7 @@ import usePaginatedReportActions from '@hooks/usePaginatedReportActions';
 import usePrevious from '@hooks/usePrevious';
 import useReportTransactionsCollection from '@hooks/useReportTransactionsCollection';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
+import useStallLogger from '@hooks/useStallLogger';
 
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import {getAllNonDeletedTransactions} from '@libs/MoneyRequestReportUtils';
@@ -20,6 +25,7 @@ import type {CancelHandle} from '@libs/Navigation/TransitionTracker';
 import {isSupportedInviteOnboardingChoice, isSupportedPendingInviteOnboarding} from '@libs/OnboardingUtils';
 import {getFilteredReportActionsForReportView, getIOUActionForReportID, getOneTransactionThreadReportID, isCreatedAction} from '@libs/ReportActionsUtils';
 import {
+    getOneOnOneChatParticipants,
     isChatThread,
     isHiddenForCurrentUser,
     isMoneyRequestReport,
@@ -35,8 +41,10 @@ import {
 import type {ReportsSplitNavigatorParamList, RightModalNavigatorParamList} from '@navigation/types';
 
 import {
+    clearReportNavigatedAway,
     clearStaleDMRecoveryTargetByTargetReportID,
     createTransactionThreadReport,
+    flagReportNavigatedAway,
     joinReportViaSecureLink,
     markLocalReportActionsAsLoaded,
     openReport,
@@ -55,6 +63,8 @@ import SCREENS from '@src/SCREENS';
 import type {Transaction} from '@src/types/onyx';
 
 import {useIsFocused, useNavigation, useRoute} from '@react-navigation/native';
+import {guidedSetupAndTourStatusSelector} from '@selectors/Onboarding';
+import {deepEqual} from 'fast-equals';
 import {useEffect, useEffectEvent, useRef} from 'react';
 
 type ReportScreenRoute =
@@ -87,6 +97,7 @@ function ReportFetchHandler() {
 
     // Only the main report route carries a Submit-via-PDF secure access key.
     const secureKeyFromRoute = route.name === SCREENS.REPORT ? route.params?.secureKey : undefined;
+    const isPendingCreationFromRoute = route.name === SCREENS.REPORT ? route.params?.isPendingCreation === 'true' : false;
     const shouldReplaceWithExpenseReportRHP = route.name === SCREENS.RIGHT_MODAL.SEARCH_REPORT && route.params?.[REPORT_LINK_ROUTE_PARAMS.SHOULD_REPLACE_WITH_EXPENSE_REPORT_RHP] === 'true';
 
     const navigation = useNavigation<PlatformStackNavigationProp<ReportsSplitNavigatorParamList, typeof SCREENS.REPORT>>();
@@ -95,23 +106,35 @@ function ReportFetchHandler() {
     const {isOffline} = useNetwork();
     const {shouldUseNarrowLayout} = useResponsiveLayout();
     const isInSidePanel = useIsInSidePanel();
+    // A preloaded Inbox tab mounts this screen before the user opens it. OpenReport marks the report read, so every
+    // fetch that could mark it read is held while the tab is preloaded. Opening the tab drops the flag, which re-runs
+    // the navigate effect below and fetches this report, so a held fetch of this report needs no separate replay.
+    const isInPreloadedTab = useIsInPreloadedTab();
+
+    // A hidden wide submit pre-mount still loads its report, but the read state is left for the reveal (see useMarkAsRead).
+    const isHiddenPreMount = useIsHiddenWideTabPreMount();
     const {accountID: currentUserAccountID, email: currentUserEmail} = useCurrentUserPersonalDetails();
+    const personalDetails = usePersonalDetails();
     const isAnonymousUser = useIsAnonymousUser();
     const prevIsAnonymousUser = useRef(false);
     const hasCreatedLegacyThreadRef = useRef(false);
     const didSubscribeToReportLeavingEvents = useRef(false);
     const joinedSecureLinkReportIDRef = useRef<string | undefined>(undefined);
+    const hiddenPreMountFetchedRouteRef = useRef<Pick<ReportScreenRoute, 'key' | 'params'> | undefined>(undefined);
 
     const [reportOnyx] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${reportIDFromRoute}`);
     const [hasReportActions] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportIDFromRoute}`, {selector: Boolean});
     const [reportDraftOnyx] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_DRAFT}${reportIDFromRoute}`);
+    const [isPreMountedDraft] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_PRE_MOUNTED_DRAFT}${reportIDFromRoute}`);
     const [chatReport] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${reportOnyx?.chatReportID}`);
     const [reportMetadata = defaultReportMetadata] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_METADATA}${reportIDFromRoute}`);
     const [reportLoadingState = defaultReportLoadingState] = useOnyx(`${ONYXKEYS.COLLECTION.RAM_ONLY_REPORT_LOADING_STATE}${reportIDFromRoute}`);
     const isReportActionsLoaded = useIsReportActionsLoaded(reportIDFromRoute);
     const [introSelected] = useOnyx(ONYXKEYS.NVP_INTRO_SELECTED);
-    const [betas] = useOnyx(ONYXKEYS.BETAS);
+    const [conciergeReportID] = useOnyx(ONYXKEYS.CONCIERGE_REPORT_ID);
+    const [conciergeChat] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${conciergeReportID}`);
     const [onboarding] = useOnyx(ONYXKEYS.NVP_ONBOARDING);
+    const [guidedSetupAndTourStatus] = useOnyx(ONYXKEYS.NVP_ONBOARDING, {selector: guidedSetupAndTourStatusSelector});
     const [isLoadingApp] = useOnyx(ONYXKEYS.IS_LOADING_APP);
     const [isLoadingReportData = true] = useOnyx(ONYXKEYS.IS_LOADING_REPORT_DATA);
     const prevIsLoadingReportData = usePrevious(isLoadingReportData);
@@ -149,12 +172,30 @@ function ReportFetchHandler() {
 
     const isInviteOnboardingComplete = introSelected?.isInviteOnboardingComplete ?? false;
     const isOnboardingCompleted = onboarding?.hasCompletedGuidedSetupFlow ?? false;
+    const isSelfTourViewed = guidedSetupAndTourStatus?.isSelfTourViewed;
+    const hasCompletedGuidedSetupFlow = guidedSetupAndTourStatus?.hasCompletedGuidedSetupFlow;
     const isRegularOnboardingPending = !!introSelected && !introSelected.inviteType && isSupportedInviteOnboardingChoice(introSelected.choice) && !isOnboardingCompleted;
     const isPendingInviteOnboarding = isSupportedPendingInviteOnboarding(introSelected);
     const onboardingSignal = introSelected ? `${introSelected.choice ?? ''}:${introSelected.inviteType ?? ''}:${isInviteOnboardingComplete ? 'complete' : 'pending'}` : '';
     const shouldDeferGuidedSetupOpenReport = !!isLoadingApp && (isRegularOnboardingPending || isPendingInviteOnboarding);
 
     const fetchReport = useEffectEvent(() => {
+        // For a Submit-via-PDF secure access link, JoinReportViaSecureLink grants access and returns the report.
+        // Calling the vanilla openReport before the join completes would 403 and latch the not-found page, so defer
+        // to the join while the secureKey is still on the route. Once the join grants access the secureKey is cleared,
+        // and normal fetching resumes.
+        if (secureKeyFromRoute) {
+            return;
+        }
+
+        // isPendingCreationFromRoute means reportIDFromRoute is a client-generated ID that doesn't exist
+        // on the server yet. Calling openReport for it would 403 and show the not-found page instead.
+        // Once the real submit creates the report under this ID, reportOnyx?.reportID becomes truthy
+        // and normal fetching resumes.
+        if (isPendingCreationFromRoute && !reportOnyx?.reportID) {
+            return;
+        }
+
         if (reportMetadata.isOptimisticReport && report?.type === CONST.REPORT.TYPE.CHAT && !isPolicyExpenseChat(report)) {
             // openReport is intentionally never called for an optimistic chat report, so nothing else can settle its
             // initial-load state. The stamp written at creation lives in a RAM-only key and is lost on an app restart,
@@ -175,6 +216,13 @@ function ReportFetchHandler() {
             return;
         }
 
+        // A pre-mounted draft gets copied into the real report collection so it can render immediately,
+        // which makes reportOnyx?.reportID truthy even though the row is still speculative - the guard
+        // above no longer catches it, so check the pre-mount marker directly instead.
+        if (isPreMountedDraft) {
+            return;
+        }
+
         if (report?.errorFields?.notFound && isOffline) {
             return;
         }
@@ -187,7 +235,31 @@ function ReportFetchHandler() {
             return;
         }
 
-        openReport({reportID: reportIDFromRoute, introSelected, reportActionID: reportActionIDFromRoute, betas, hasReportActions});
+        if (isHiddenPreMount) {
+            hiddenPreMountFetchedRouteRef.current = {key: route.key, params: route.params};
+        }
+
+        // For a cached 1:1 DM, pass the other participant so the server can resolve a stale/optimistic
+        // reportID to the real chat (via preexistingReportID) instead of failing with "Report not found".
+        const dmParticipants = getOneOnOneChatParticipants(report, personalDetails, currentUserAccountID);
+        openReport({
+            reportID: reportIDFromRoute,
+            introSelected,
+            conciergeChat,
+            reportActionID: reportActionIDFromRoute,
+            participants: dmParticipants,
+            personalDetails,
+            hasReportActions,
+            // Falsy means a page refresh / cold start, which is when openReport clears a manual unread marker.
+            // This screen opens the report the user is looking at, so it is the only caller that passes it.
+            hasOnceLoadedReportActions: reportLoadingState.hasOnceLoadedReportActions,
+            // The reveal skips the route fetch and ends the return trip (see below), so the newest page and the marker stay.
+            shouldMarkAsRead: !isHiddenPreMount,
+            shouldKeepManualUnreadMarker: isHiddenPreMount,
+            currentUserAccountID,
+            isSelfTourViewed,
+            hasCompletedGuidedSetupFlow,
+        });
     });
 
     const createOneTransactionThread = useEffectEvent(() => {
@@ -198,12 +270,15 @@ function ReportFetchHandler() {
         const iouAction = getIOUActionForReportID(reportID, oneTransactionID);
         createTransactionThreadReport({
             introSelected,
+            conciergeChat,
+            isSelfTourViewed,
+            hasCompletedGuidedSetupFlow,
             currentUserLogin: currentUserEmail ?? '',
             currentUserAccountID,
-            betas,
             iouReport: report,
             iouReportAction: iouAction,
             transaction: currentReportTransactions.at(0),
+            personalDetails,
         });
     });
 
@@ -219,7 +294,7 @@ function ReportFetchHandler() {
         if (!shouldUseNarrowLayout || !isChatThread(report) || !isHiddenForCurrentUser(report) || isTransactionThreadView) {
             return;
         }
-        openReport({reportID, introSelected, betas, hasReportActions});
+        openReport({reportID, introSelected, conciergeChat, personalDetails, hasReportActions, currentUserAccountID, isSelfTourViewed, hasCompletedGuidedSetupFlow});
     });
 
     const joinPublicRoomIfNeeded = useEffectEvent(() => {
@@ -227,7 +302,37 @@ function ReportFetchHandler() {
         if (!viewingPublicRoomReportID || viewingPublicRoomReportID === reportIDFromRoute) {
             return;
         }
-        openReport({reportID: viewingPublicRoomReportID, introSelected, betas, hasReportActions: hasViewingPublicRoomReportActions});
+        openReport({
+            reportID: viewingPublicRoomReportID,
+            introSelected,
+            conciergeChat,
+            personalDetails,
+            hasReportActions: hasViewingPublicRoomReportActions,
+            currentUserAccountID,
+            isSelfTourViewed,
+            hasCompletedGuidedSetupFlow,
+        });
+    });
+
+    // The user sees a revealed pre-mount only now, so this visit is not a return trip. Declared before the fetch
+    // effects, so a fetch in the reveal commit does not clear the manual unread marker.
+    const prevIsHiddenPreMount = usePrevious(isHiddenPreMount);
+    useEffect(() => {
+        if (!prevIsHiddenPreMount || isHiddenPreMount) {
+            return;
+        }
+        clearReportNavigatedAway(reportIDFromRoute);
+    }, [prevIsHiddenPreMount, isHiddenPreMount, reportIDFromRoute]);
+
+    // The reveal rebuilds the route with the same key and params, which re-runs the route fetch. Skip it once, or it
+    // would jump to the last unread page instead of the newest one with the new expense.
+    const shouldSkipRevealRouteFetch = useEffectEvent(() => {
+        const hiddenPreMountFetchedRoute = hiddenPreMountFetchedRouteRef.current;
+        if (isHiddenPreMount || !hiddenPreMountFetchedRoute) {
+            return false;
+        }
+        hiddenPreMountFetchedRouteRef.current = undefined;
+        return hiddenPreMountFetchedRoute.key === route.key && deepEqual(hiddenPreMountFetchedRoute.params, route.params);
     });
 
     // Effect order below matches the original declaration order in ReportScreen.tsx.
@@ -238,6 +343,9 @@ function ReportFetchHandler() {
     // See issue #84248.
     const prevReportID = usePrevious(report?.reportID);
     useEffect(() => {
+        if (isInPreloadedTab) {
+            return;
+        }
         const wasJustWiped = !!prevReportID && prevReportID === reportIDFromRoute && !report?.reportID;
         if (!wasJustWiped || !isCurrentRouteOwnWorkspaceChatRef.current) {
             return;
@@ -245,7 +353,7 @@ function ReportFetchHandler() {
         fetchReport();
         // fetchReport is a stable useEffectEvent callback and does not need to be listed as a dependency.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [report?.reportID, prevReportID, reportIDFromRoute]);
+    }, [report?.reportID, prevReportID, reportIDFromRoute, isInPreloadedTab]);
 
     useEffect(() => {
         if (!transactionThreadReportID || !route?.params?.reportActionID || !isOneTransactionThread(childReport, report, linkedAction)) {
@@ -270,11 +378,36 @@ function ReportFetchHandler() {
     // the "secure-link visit" signal that suppresses onboarding, so a slow join could bounce a new user into onboarding
     // before they gain access. Once the report is accessible we clear it so it isn't reused or left in history.
     useEffect(() => {
-        if (!secureKeyFromRoute || joinedSecureLinkReportIDRef.current !== reportIDFromRoute || !report?.reportID || !!report?.errorFields?.notFound) {
+        // Clear the secureKey once the join has resolved either way: on success the report is accessible (reportID set),
+        // on failure it is marked not-found. Both release the fetchReport gate so the report loads or shows the 404.
+        const joinResolved = !!report?.reportID || !!report?.errorFields?.notFound;
+        if (!secureKeyFromRoute || joinedSecureLinkReportIDRef.current !== reportIDFromRoute || !joinResolved) {
             return;
         }
         navigation.setParams({secureKey: undefined});
     }, [secureKeyFromRoute, reportIDFromRoute, report?.reportID, report?.errorFields?.notFound, navigation]);
+
+    // isPendingCreation is only needed before the report exists. Clear it from the route params once it
+    // does, so a copied URL, restored navigation state, or reload doesn't carry the stale flag and skip
+    // fetching again later.
+    useEffect(() => {
+        if (!isPendingCreationFromRoute || !reportOnyx?.reportID) {
+            return;
+        }
+        navigation.setParams({isPendingCreation: undefined});
+    }, [isPendingCreationFromRoute, reportOnyx?.reportID, navigation]);
+
+    // A restored or shared route can carry isPendingCreation with no submit behind it. The owning submit writes the
+    // report row within the dismiss transition budget (about 2s) after this screen gains focus, so a focused screen
+    // still without a row after the much longer grace period holds a stale flag. Expire it, or the screen would skip
+    // fetching and never resolve to content or not-found.
+    useEffect(() => {
+        if (!isPendingCreationFromRoute || !isFocused || !!reportOnyx?.reportID) {
+            return;
+        }
+        const timeout = setTimeout(() => navigation.setParams({isPendingCreation: undefined}), CONST.TIMING.STALE_PENDING_CREATION_ROUTE_TIMEOUT);
+        return () => clearTimeout(timeout);
+    }, [isPendingCreationFromRoute, isFocused, reportOnyx?.reportID, navigation]);
 
     useEffect(() => {
         if (!isAnonymousUser) {
@@ -295,17 +428,36 @@ function ReportFetchHandler() {
         createOneTransactionThread();
     }, [reportLoadingState.hasOnceLoadedReportActions, reportMetadata?.isOptimisticReport, transactionThreadReport?.reportID, transactionThreadReportID, isOffline]);
 
+    const hasHeldPublicRoomJoin = useRef(false);
+
     useEffect(() => {
         if (isLoadingReportData || !prevIsLoadingReportData || !prevIsAnonymousUser.current || isAnonymousUser) {
             return;
         }
         // Re-fetch public report data after user signs in and OpenApp API is called to
         // avoid reportActions data being empty for public rooms.
+        if (isInPreloadedTab) {
+            // This sign-in transition is true for one render only, so record it. Unlike the fetch of this report,
+            // joining the public room has no other effect that re-runs on open and would pick it up again.
+            hasHeldPublicRoomJoin.current = true;
+            return;
+        }
         joinPublicRoomIfNeeded();
         fetchReport();
-    }, [isLoadingReportData, prevIsLoadingReportData, prevIsAnonymousUser, isAnonymousUser]);
+    }, [isLoadingReportData, prevIsLoadingReportData, prevIsAnonymousUser, isAnonymousUser, isInPreloadedTab]);
 
     useEffect(() => {
+        if (isInPreloadedTab || !hasHeldPublicRoomJoin.current) {
+            return;
+        }
+        hasHeldPublicRoomJoin.current = false;
+        joinPublicRoomIfNeeded();
+    }, [isInPreloadedTab]);
+
+    useEffect(() => {
+        if (isInPreloadedTab) {
+            return;
+        }
         // If transactionThreadReportID is undefined or CONST.FAKE_REPORT_ID, we do not call fetchReport.
         // Only when transactionThreadReportID changes to a valid value, the fetchReport will be called to fetch the data again for the current report.
         // Since fetchReport is always called once when opening a report,
@@ -319,14 +471,14 @@ function ReportFetchHandler() {
         }
 
         fetchReport();
-    }, [prevTransactionThreadReportID, transactionThreadReportID]);
+    }, [prevTransactionThreadReportID, transactionThreadReportID, isInPreloadedTab]);
 
     useEffect(() => {
-        if (!reportID || !isFocused || isInSidePanel) {
+        if (!reportID || !isFocused || isInSidePanel || isHiddenPreMount) {
             return;
         }
         updateLastVisitTime(reportID);
-    }, [reportID, isFocused, isInSidePanel]);
+    }, [reportID, isFocused, isInSidePanel, isHiddenPreMount]);
 
     useEffect(() => {
         if (!isFocused || !reportID || !isPublicRoom(report) || !isAnonymousUser) {
@@ -342,6 +494,28 @@ function ReportFetchHandler() {
         };
     }, []);
 
+    // Record navigating away so the next openReport can clear a manual unread marker on the return trip. We flag
+    // on blur (wide layout keeps the screen mounted) and on unmount / reportID change (narrow layout tears it
+    // down). Staying in the report never flags it, so the user's marker is not wiped mid-session.
+    // A hidden pre-mount the user never saw, e.g. after a cancelled submit, was not navigated away from.
+    const flagNavigatedAwayIfShown = useEffectEvent((navigatedAwayReportID: string | undefined) => {
+        if (isHiddenPreMount) {
+            return;
+        }
+        flagReportNavigatedAway(navigatedAwayReportID);
+    });
+
+    useEffect(() => {
+        if (!prevIsFocused || isFocused) {
+            return;
+        }
+        flagNavigatedAwayIfShown(reportIDFromRoute);
+    }, [isFocused, prevIsFocused, reportIDFromRoute]);
+
+    useEffect(() => {
+        return () => flagNavigatedAwayIfShown(reportIDFromRoute);
+    }, [reportIDFromRoute]);
+
     // `isLoadingInitialReportActions` is memory-only and is not reset between navigations. A prior failed
     // fetch leaves a stale `false` that can make ReportNotFoundGuard show "not here" before the fetch below
     // re-runs. When opening a report whose actions were never successfully loaded, mark it as loading again so
@@ -352,6 +526,43 @@ function ReportFetchHandler() {
         }
         updateLoadingInitialReportAction(reportIDFromRoute, true);
     }, [reportIDFromRoute, reportLoadingState.hasOnceLoadedReportActions]);
+
+    // "Clear cache and restart" drops the memory-only `hasOnceLoadedReportActions` under a mounted report screen, and
+    // nothing re-fetches, so the effect above re-arms `isLoadingInitialReportActions` for a load that never comes and
+    // the report preview spins forever. Re-fetch only when a stamp this screen saw for the same reportID is lost, so a
+    // normal open or a switch to another report does not double up on the fetch effect below. See issue #100524.
+    const stampedReportIDRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (reportLoadingState.hasOnceLoadedReportActions) {
+            stampedReportIDRef.current = reportIDFromRoute;
+            return;
+        }
+
+        // Held while the Inbox tab is merely preloaded, like every other fetch here: OpenReport would mark a report
+        // the user has never opened as read. The ref survives the bail, so opening the tab re-runs this effect and
+        // the fetch is deferred rather than lost.
+        if (stampedReportIDRef.current !== reportIDFromRoute || !isFocused || isOffline || isInPreloadedTab) {
+            return;
+        }
+        stampedReportIDRef.current = undefined;
+        fetchReport();
+    }, [reportIDFromRoute, reportLoadingState.hasOnceLoadedReportActions, isFocused, isOffline, isInPreloadedTab]);
+
+    // isLoadingInitialReportActions only clears via OpenReport's success/failure Onyx update (no client timeout), so
+    // a reconciliation stall that pauses the queue before that response arrives leaves the skeleton stuck with
+    // nothing else to log it. See Expensify#667674.
+    // Excluded while offline: OpenReport is legitimately queued and waiting for connectivity, not stuck.
+    // Excluded for draft-only reports (see the fetchReport bail above): openReport is never called for these by
+    // design, and nothing else sets hasOnceLoadedReportActions for them either, so they'd otherwise always false-positive.
+    // Keyed by reportIDFromRoute (not just a boolean) because this screen can be re-parameterized to a different
+    // report without unmounting (e.g. picking another report in the LHN while this one is still loading), and a
+    // plain boolean can't tell "still waiting on report A" apart from "now waiting on report B".
+    const isDraftOnlyReport = !reportOnyx?.reportID && !!reportDraftOnyx?.reportID;
+    useStallLogger(
+        isFocused && !isOffline && !isDraftOnlyReport && !!reportLoadingState.isLoadingInitialReportActions && !reportLoadingState.hasOnceLoadedReportActions ? reportIDFromRoute : false,
+        '[OpenReportStall] isLoadingInitialReportActions never cleared while the report screen was focused',
+        {reportID: reportIDFromRoute},
+    );
 
     useEffect(() => {
         // Both `Navigation.setParams` and `forceReplace` below act on the currently focused route, but this effect
@@ -375,18 +586,24 @@ function ReportFetchHandler() {
         // For each link click, we retrieve the report data again, even though it may already be cached.
         // Usually this triggers one openReport execution per page start or navigation. If guided setup is deferred while app data loads,
         // rerun once the defer signal clears so openReport includes the loaded onboarding data.
+        if (isInPreloadedTab || shouldSkipRevealRouteFetch()) {
+            return;
+        }
         fetchReport();
-    }, [route, isLinkedMessagePageReady, reportActionIDFromRoute, shouldDeferGuidedSetupOpenReport, onboardingSignal]);
+    }, [route, isLinkedMessagePageReady, reportActionIDFromRoute, shouldDeferGuidedSetupOpenReport, onboardingSignal, isInPreloadedTab]);
 
     useEffect(() => {
         // This function is only triggered when a user is invited to a room after opening the link.
         // When a user opens a room they are not a member of, and the admin then invites them, only the INVITE_TO_ROOM action is available, so the background will be empty and room description is not available.
         // See https://github.com/Expensify/App/issues/57769 for more details
+        if (isInPreloadedTab) {
+            return;
+        }
         if (prevReportActions.length !== 0 || reportActions.length !== 1 || reportActions.at(0)?.actionName !== CONST.REPORT.ACTIONS.TYPE.ROOM_CHANGE_LOG.INVITE_TO_ROOM) {
             return;
         }
         fetchReport();
-    }, [prevReportActions.length, reportActions]);
+    }, [prevReportActions.length, reportActions, isInPreloadedTab]);
 
     useEffect(() => {
         if (!isFocused || prevIsFocused) {
@@ -428,12 +645,15 @@ function ReportFetchHandler() {
     }, [report?.reportID, didSubscribeToReportLeavingEvents, reportIDFromRoute, report?.pendingFields, currentUserAccountID]);
 
     useEffect(() => {
+        if (isInPreloadedTab || isHiddenPreMount) {
+            return;
+        }
         if (!!report?.lastReadTime || !isTaskReport(report)) {
             return;
         }
         // After creating the task report then navigating to task detail we don't have any report actions and the last read time is empty so We need to update the initial last read time when opening the task report detail.
         readNewestAction(report?.reportID, isReportActionsLoaded);
-    }, [report, isReportActionsLoaded]);
+    }, [report, isReportActionsLoaded, isInPreloadedTab, isHiddenPreMount]);
 
     useEffect(() => {
         hasCreatedLegacyThreadRef.current = false;
@@ -475,17 +695,22 @@ function ReportFetchHandler() {
         // It will be created optimistically and in the backend when call openReport
         createTransactionThreadReport({
             introSelected,
+            conciergeChat,
+            isSelfTourViewed,
+            hasCompletedGuidedSetupFlow,
             currentUserLogin: currentUserEmail ?? '',
             currentUserAccountID,
-            betas,
             iouReport: report,
             transaction,
+            personalDetails,
         });
     }, [
         introSelected,
+        isSelfTourViewed,
+        hasCompletedGuidedSetupFlow,
         currentUserEmail,
         currentUserAccountID,
-        betas,
+        personalDetails,
         report,
         visibleTransactions,
         transactionThreadReport,
@@ -494,6 +719,7 @@ function ReportFetchHandler() {
         route.name,
         reportLoadingState?.hasOnceLoadedReportActions,
         reportActions.length,
+        conciergeChat,
     ]);
 
     return null;

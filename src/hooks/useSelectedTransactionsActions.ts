@@ -11,10 +11,11 @@ import {getExportTemplates, handlePreventSearchAPI} from '@libs/actions/Search';
 import initSplitExpense from '@libs/actions/SplitExpenses';
 import createDynamicRoute from '@libs/Navigation/helpers/dynamicRoutesUtils/createDynamicRoute';
 import Navigation, {navigationRef} from '@libs/Navigation/Navigation';
-import {getIOUActionForTransactionID, getReportAction, isDeletedAction} from '@libs/ReportActionsUtils';
+import {getLoginByAccountID} from '@libs/PersonalDetailsUtils';
+import {getIOUActionForTransactionID, getOriginalMessage, getReportAction, isDeletedAction, isMoneyRequestAction} from '@libs/ReportActionsUtils';
 import {isMergeActionForSelectedTransactions, isSplitAction} from '@libs/ReportSecondaryActionUtils';
 import {
-    canDeleteCardTransactionByLiabilityType,
+    canDeleteCardTransaction,
     canDeleteTransaction,
     canEditFieldOfMoneyRequest,
     canEditMultipleTransactions,
@@ -28,7 +29,7 @@ import {
     isTrackExpenseReport,
 } from '@libs/ReportUtils';
 import {getCurrentSearchQueryJSON} from '@libs/SearchQueryUtils';
-import {getChildTransactions, getOriginalTransactionWithSplitInfo, hasTransactionBeenRejected} from '@libs/TransactionUtils';
+import {getChildTransactions, getOriginalTransactionWithSplitInfo, hasTransactionBeenRejected, isManagedCardTransaction} from '@libs/TransactionUtils';
 
 import type {IOUType} from '@src/CONST';
 import CONST from '@src/CONST';
@@ -46,16 +47,18 @@ import useConfirmModal from './useConfirmModal';
 import {useCurrencyListActions} from './useCurrencyList';
 import useCurrentUserPersonalDetails from './useCurrentUserPersonalDetails';
 import useDefaultExpensePolicy from './useDefaultExpensePolicy';
+import useDelegateAccountID from './useDelegateAccountID';
 import useDeleteTransactions from './useDeleteTransactions';
 import useDuplicateTransactionsAndViolations from './useDuplicateTransactionsAndViolations';
-import useEnvironment from './useEnvironment';
 import {useMemoizedLazyExpensifyIcons} from './useLazyAsset';
 import useLocalize from './useLocalize';
 import useNetworkWithOfflineStatus from './useNetworkWithOfflineStatus';
 import useOnyx from './useOnyx';
 import usePermissions from './usePermissions';
+import {useAllPersonalDetails} from './usePersonalDetails';
 import usePersonalPolicy from './usePersonalPolicy';
 import useReportIsArchived from './useReportIsArchived';
+import useReportTransactions from './useReportTransactions';
 import useRestrictedActionPolicyID from './useRestrictedActionPolicyID';
 import {shouldShowBulkDuplicateOption} from './useSearchBulkActions';
 import useSplitEffectivePolicy from './useSplitEffectivePolicy';
@@ -95,18 +98,19 @@ function useSelectedTransactionsActions({
     const [allReports] = useOnyx(ONYXKEYS.COLLECTION.REPORT);
     const [allReportActions] = useOnyx(ONYXKEYS.COLLECTION.REPORT_ACTIONS);
     const [allPolicies] = useOnyx(ONYXKEYS.COLLECTION.POLICY);
+    const [cardList] = useOnyx(ONYXKEYS.CARD_LIST);
     const [outstandingReportsByPolicyID] = useOnyx(ONYXKEYS.DERIVED.OUTSTANDING_REPORTS_BY_POLICY_ID);
-    const [lastVisitedPath] = useOnyx(ONYXKEYS.LAST_VISITED_PATH);
     const [integrationsExportTemplates] = useOnyx(ONYXKEYS.NVP_INTEGRATION_SERVER_EXPORT_TEMPLATES);
     const [csvExportLayouts] = useOnyx(ONYXKEYS.NVP_CSV_EXPORT_LAYOUTS);
     const [allTransactionViolations] = useOnyx(ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS);
     const [allReportNameValuePairs] = useOnyx(ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS);
     const [selfDMReportID] = useOnyx(ONYXKEYS.SELF_DM_REPORT_ID);
+    const [rules] = useOnyx(ONYXKEYS.COLLECTION.RULE);
     const firstSelectedTransaction = allTransactions?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${selectedTransactionIDs.at(0)}`];
     const splitEffectivePolicy = useSplitEffectivePolicy(report, undefined, firstSelectedTransaction);
     const personalPolicy = usePersonalPolicy();
     const restrictedActionPolicyID = useRestrictedActionPolicyID(policy);
-    const {getCurrencyDecimals} = useCurrencyListActions();
+    const {getCurrencyDecimals, getCurrencySymbol} = useCurrencyListActions();
     const [isTrackIntentUser] = useOnyx(ONYXKEYS.NVP_INTRO_SELECTED, {selector: isTrackIntentUserSelector});
 
     const expensifyIcons = useMemoizedLazyExpensifyIcons([
@@ -126,11 +130,13 @@ function useSelectedTransactionsActions({
 
     const {duplicateTransactions, duplicateTransactionViolations} = useDuplicateTransactionsAndViolations(selectedTransactionIDs);
     const isReportArchived = useReportIsArchived(report?.reportID);
+    const reportTransactions = useReportTransactions(report?.reportID);
     const {isBetaEnabled} = usePermissions();
     const {deleteTransactions, shouldOpenSplitExpenseEditFlowOnDelete} = useDeleteTransactions({report, reportActions, policy});
     const {login, accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
+    const delegateAccountID = useDelegateAccountID();
+    const [personalDetails] = useAllPersonalDetails();
     const defaultExpensePolicy = useDefaultExpensePolicy();
-    const {isProduction} = useEnvironment();
 
     const selectedTransactionsList = selectedTransactionIDs.reduce((acc, transactionID) => {
         const transaction = allTransactions?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
@@ -286,7 +292,7 @@ function useSelectedTransactionsActions({
     if (selectedTransactionIDs.length) {
         const options = [];
 
-        const canEditMultiple = canEditMultipleTransactions(selectedTransactionsList, allReportActions, allReports, allPolicies) && isBetaEnabled(CONST.BETAS.BULK_EDIT);
+        const canEditMultiple = canEditMultipleTransactions(selectedTransactionsList, allReportActions, allReports, allPolicies, rules) && isBetaEnabled(CONST.BETAS.BULK_EDIT);
 
         if (canEditMultiple) {
             options.push({
@@ -317,7 +323,7 @@ function useSelectedTransactionsActions({
             }
             const iouReportAction = getIOUActionForTransactionID(reportActions, selectedTransaction.transactionID);
             const holdReportAction = getReportAction(iouReportAction?.childReportID, `${selectedTransaction?.comment?.hold ?? ''}`);
-            const {canHoldRequest, canUnholdRequest} = canHoldUnholdReportAction(report, iouReportAction, holdReportAction, selectedTransaction, policy, currentUserAccountID);
+            const {canHoldRequest, canUnholdRequest} = canHoldUnholdReportAction(report, iouReportAction, holdReportAction, selectedTransaction, policy, currentUserAccountID, rules);
 
             canHoldTransactions = canHoldTransactions && canHoldRequest;
             canUnholdTransactions = canUnholdTransactions && canUnholdRequest;
@@ -359,7 +365,19 @@ function useSelectedTransactionsActions({
                             continue;
                         }
                         const transactionViolations = allTransactionViolations?.[`${ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS}${transactionID}`];
-                        unholdRequest(transactionID, action.childReportID, policy, isOffline, login ?? '', currentUserAccountID, transactionViolations, isTrackIntentUser);
+                        unholdRequest({
+                            transactionID,
+                            transaction: allTransactions?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`],
+                            reportID: action.childReportID,
+                            policy,
+                            isOffline,
+                            currentUserLogin: login ?? '',
+                            currentUserAccountID,
+                            transactionViolations,
+                            isTrackIntentUser,
+                            delegateAccountID,
+                            rules,
+                        });
                     }
                     clearSelectedTransactions(true);
                 },
@@ -368,7 +386,7 @@ function useSelectedTransactionsActions({
 
         const hasNoRejectedTransaction = selectedTransactionIDs.every((id) => !hasTransactionBeenRejected(allTransactionViolations?.[ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS + id] ?? []));
         const canRejectTransactions =
-            selectedTransactionsList.length > 0 && isMoneyRequestReport && !!session?.email && !!report && canRejectReportAction(session.email, report) && hasNoRejectedTransaction;
+            selectedTransactionsList.length > 0 && isMoneyRequestReport && !!report && canRejectReportAction(report, session?.accountID, policy) && hasNoRejectedTransaction;
         if (canRejectTransactions) {
             options.push({
                 text: translate('search.bulkActions.reject'),
@@ -425,6 +443,7 @@ function useSelectedTransactionsActions({
                                       onExportFailed?.();
                                   },
                                   translate,
+                                  reportTransactions,
                               );
                               clearSelectedTransactions(true);
                           }
@@ -458,18 +477,20 @@ function useSelectedTransactionsActions({
                 return false;
             }
             const iouReportAction = getIOUActionForTransactionID(reportActions, transaction.transactionID);
-
+            const moneyRequestReportID = iouReportAction?.reportID ?? (isMoneyRequestAction(iouReportAction) ? getOriginalMessage(iouReportAction)?.IOUReportID : undefined);
             const canMoveExpense = canEditFieldOfMoneyRequest({
                 reportAction: iouReportAction,
+                reportActions: allReportActions?.[`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${moneyRequestReportID}`],
                 fieldToEdit: CONST.EDIT_REQUEST_FIELD.REPORT,
                 outstandingReportsByPolicyID,
                 transaction,
                 reportNameValuePairs: allReportNameValuePairs,
+                rules,
             });
             return canMoveExpense;
         });
 
-        const canMergeTransaction = selectedTransactionsList.length < 3 && report && policy && isMergeActionForSelectedTransactions(selectedTransactionsList, [report], [policy]);
+        const canMergeTransaction = selectedTransactionsList.length < 3 && report && policy && isMergeActionForSelectedTransactions(selectedTransactionsList, [report], [policy], rules);
         if (canMergeTransaction) {
             const transactionID = selectedTransactionsList.at(0)?.transactionID;
             if (transactionID) {
@@ -487,6 +508,8 @@ function useSelectedTransactionsActions({
                             false,
                             isOnSearch,
                             selectedTransactionsList.length > 1 ? [policy, policy] : undefined,
+                            currentUserAccountID,
+                            personalDetails,
                         ),
                 });
             }
@@ -500,7 +523,7 @@ function useSelectedTransactionsActions({
                 value: MOVE,
                 onSelected: () => {
                     const shouldTurnOffSelectionMode = allTransactionsLength - selectedTransactionIDs.length <= 1;
-                    const route = ROUTES.MONEY_REQUEST_EDIT_REPORT.getRoute(CONST.IOU.ACTION.EDIT, iouType, report?.reportID, shouldTurnOffSelectionMode, lastVisitedPath);
+                    const route = createDynamicRoute(DYNAMIC_ROUTES.MONEY_REQUEST_EDIT_REPORT.getRoute(CONST.IOU.ACTION.EDIT, iouType, report?.reportID, shouldTurnOffSelectionMode));
                     Navigation.navigate(route);
                 },
             });
@@ -511,12 +534,22 @@ function useSelectedTransactionsActions({
 
         const {isExpenseSplit} = getOriginalTransactionWithSplitInfo(firstTransaction, originalTransaction);
         const parentReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${report?.parentReportID}`];
-        const hasMultipleSplits = getChildTransactions(allTransactions, firstTransaction?.comment?.originalTransactionID, isProduction).length > 1;
+        const hasMultipleSplits = getChildTransactions(allTransactions, firstTransaction?.comment?.originalTransactionID).length > 1;
         const canSplitTransaction =
             selectedTransactionsList.length === 1 &&
             report &&
             !(isExpenseSplit && hasMultipleSplits) &&
-            isSplitAction(report, [firstTransaction], originalTransaction, login ?? '', currentUserAccountID, policy, parentReport, isProduction);
+            isSplitAction(
+                report,
+                [firstTransaction],
+                originalTransaction,
+                login ?? '',
+                currentUserAccountID,
+                rules,
+                getLoginByAccountID(report?.ownerAccountID, personalDetails),
+                policy,
+                parentReport,
+            );
 
         if (canSplitTransaction) {
             options.push({
@@ -524,7 +557,16 @@ function useSelectedTransactionsActions({
                 icon: expensifyIcons.ArrowSplit,
                 value: SPLIT,
                 onSelected: () => {
-                    initSplitExpense(firstTransaction, report, splitEffectivePolicy, selfDMReportID, restrictedActionPolicyID, personalPolicy?.outputCurrency, {isProduction});
+                    initSplitExpense(
+                        firstTransaction,
+                        report,
+                        splitEffectivePolicy,
+                        selfDMReportID,
+                        restrictedActionPolicyID,
+                        personalPolicy?.outputCurrency,
+                        getCurrencyDecimals,
+                        getCurrencySymbol,
+                    );
                 },
             });
         }
@@ -553,15 +595,19 @@ function useSelectedTransactionsActions({
         }
 
         const canAllSelectedTransactionsBeRemoved = selectedTransactionsList.every((transaction) => {
-            const canRemoveTransaction = canDeleteCardTransactionByLiabilityType(transaction);
             const action = getIOUActionForTransactionID(reportActions, transaction.transactionID);
-            const isActionDeleted = isDeletedAction(action);
-            const isIOUActionOwner = typeof action?.actorAccountID === 'number' && typeof session?.accountID === 'number' && action.actorAccountID === session?.accountID;
+            if (isDeletedAction(action)) {
+                return false;
+            }
 
-            return canRemoveTransaction && isIOUActionOwner && !isActionDeleted;
+            if (isManagedCardTransaction(transaction)) {
+                return canDeleteCardTransaction(transaction, policy, cardList);
+            }
+
+            return typeof action?.actorAccountID === 'number' && typeof session?.accountID === 'number' && action.actorAccountID === session?.accountID;
         });
 
-        const canRemoveReportTransaction = canDeleteTransaction(report, isReportArchived);
+        const canRemoveReportTransaction = canDeleteTransaction(report, rules, isReportArchived);
 
         const shouldShowEditSplitOnDeleteAction = shouldOpenSplitExpenseEditFlowOnDelete(selectedTransactionIDs);
 

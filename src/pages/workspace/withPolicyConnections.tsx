@@ -1,8 +1,7 @@
 import FullScreenLoadingIndicator from '@components/FullscreenLoadingIndicator';
 
 import usePolicyConnectionsPrefetch from '@hooks/usePolicyConnectionsPrefetch';
-
-import type {SkeletonSpanReasonAttributes} from '@libs/telemetry/useSkeletonSpan';
+import useResponsiveLayout from '@hooks/useResponsiveLayout';
 
 import type {ComponentType} from 'react';
 
@@ -37,15 +36,11 @@ function WithPolicyConnectionsImpl<TProps extends WithPolicyConnectionsProps>({W
         isLoadingFetchedFlag: isOnyxDataLoading,
         hasBeenFetched: hasConnectionsDataBeenFetched,
     } = usePolicyConnectionsPrefetch(props.policy, true);
+    const {shouldUseNarrowLayout} = useResponsiveLayout();
     const isFetchingData = isConnectionDataFetchNeeded && !!props.policy?.id && !isBoolean(hasConnectionsDataBeenFetched);
 
     if ((isFetchingData || isOnyxDataLoading) && shouldBlockView) {
-        const reasonAttributes: SkeletonSpanReasonAttributes = {
-            context: 'withPolicyConnections',
-            isFetchingData,
-            isOnyxDataLoading,
-        };
-        return <FullScreenLoadingIndicator reasonAttributes={reasonAttributes} />;
+        return <FullScreenLoadingIndicator shouldUseGoBackButton={shouldUseNarrowLayout} />;
     }
 
     return (

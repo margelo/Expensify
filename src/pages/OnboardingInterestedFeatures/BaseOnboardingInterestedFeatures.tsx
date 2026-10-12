@@ -1,8 +1,8 @@
-import Button from '@components/ButtonComposed';
+import Button from '@components/Button';
 import Checkbox from '@components/Checkbox';
 import FixedFooter from '@components/FixedFooter';
-import HeaderWithBackButton from '@components/HeaderWithBackButton';
 import Icon from '@components/Icon';
+import OnboardingHeader from '@components/OnboardingHeader';
 import {PressableWithoutFeedback} from '@components/Pressable';
 import ScreenWrapper from '@components/ScreenWrapper';
 import ScrollView from '@components/ScrollView';
@@ -13,7 +13,6 @@ import useCompleteOnboarding from '@hooks/useCompleteOnboarding';
 import {useMemoizedLazyIllustrations} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
 import useNetwork from '@hooks/useNetwork';
-import useOnboardingStepCounter from '@hooks/useOnboardingStepCounter';
 import useOnyx from '@hooks/useOnyx';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
@@ -30,11 +29,12 @@ import type {OnboardingFeatureMapItem} from '@libs/actions/Welcome/OnboardingFea
 import Navigation from '@libs/Navigation/Navigation';
 import {isGroupPolicy, isPolicyAdmin} from '@libs/PolicyUtils';
 
+import variables from '@styles/variables';
+
 import CONST from '@src/CONST';
 import type {TranslationPaths} from '@src/languages/types';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
-import SCREENS from '@src/SCREENS';
 
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {View} from 'react-native';
@@ -48,7 +48,7 @@ function BaseOnboardingInterestedFeatures({shouldUseNativeStyles}: BaseOnboardin
 
     // We need to use isSmallScreenWidth, see navigateAfterOnboarding function comment
     // eslint-disable-next-line rulesdir/prefer-shouldUseNarrowLayout-instead-of-isSmallScreenWidth
-    const {onboardingIsMediumOrLargerScreenWidth, isSmallScreenWidth} = useResponsiveLayout();
+    const {onboardingIsMediumOrLargerScreenWidth, isSmallScreenWidth, isInLandscapeMode} = useResponsiveLayout();
     const [onboardingPolicyID] = useOnyx(ONYXKEYS.ONBOARDING_POLICY_ID);
     const [onboardingInterestedFeaturesMap] = useOnyx(ONYXKEYS.ONBOARDING_INTERESTED_FEATURES_MAP);
     const [allPolicies] = useOnyx(ONYXKEYS.COLLECTION.POLICY);
@@ -62,27 +62,82 @@ function BaseOnboardingInterestedFeatures({shouldUseNativeStyles}: BaseOnboardin
         return ONBOARDING_FEATURES.map((feature) => {
             switch (feature.id) {
                 case CONST.POLICY.MORE_FEATURES.ARE_CATEGORIES_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.categories.title'), icon: illustrations.FolderOpen};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.categories.title'),
+                        subtitle: translate('workspace.moreFeatures.categories.subtitle'),
+                        icon: illustrations.FolderOpen,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_CONNECTIONS_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.connections.title'), icon: illustrations.Accounting};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.connections.title'),
+                        subtitle: translate('workspace.moreFeatures.connections.subtitle'),
+                        icon: illustrations.Accounting,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_COMPANY_CARDS_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.companyCards.title'), icon: illustrations.CompanyCard};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.companyCards.title'),
+                        subtitle: translate('workspace.moreFeatures.companyCards.subtitle'),
+                        icon: illustrations.CompanyCard,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_WORKFLOWS_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.workflows.title'), icon: illustrations.Workflows};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.workflows.title'),
+                        subtitle: translate('workspace.moreFeatures.workflows.subtitle'),
+                        icon: illustrations.Workflows,
+                    };
                 case CONST.POLICY.MORE_FEATURES.IS_TRAVEL_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.travel.title'), icon: illustrations.Luggage};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.travel.title'),
+                        subtitle: translate('workspace.moreFeatures.travel.subtitle'),
+                        icon: illustrations.Luggage,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_RULES_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.rules.title'), icon: illustrations.Rules};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.rules.title'),
+                        subtitle: translate('workspace.moreFeatures.rules.subtitle'),
+                        icon: illustrations.Rules,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_DISTANCE_RATES_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.distanceRates.title'), icon: illustrations.Car};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.distanceRates.title'),
+                        subtitle: translate('workspace.moreFeatures.distanceRates.subtitle'),
+                        icon: illustrations.Car,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_EXPENSIFY_CARDS_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.expensifyCard.title'), icon: illustrations.HandCard};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.expensifyCard.title'),
+                        subtitle: translate('workspace.moreFeatures.expensifyCard.subtitle'),
+                        icon: illustrations.HandCard,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_TAGS_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.tags.title'), icon: illustrations.Tag};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.tags.title'),
+                        subtitle: translate('workspace.moreFeatures.tags.subtitle'),
+                        icon: illustrations.Tag,
+                    };
                 case CONST.POLICY.MORE_FEATURES.ARE_PER_DIEM_RATES_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.perDiem.title'), icon: illustrations.PerDiem};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.perDiem.title'),
+                        subtitle: translate('workspace.moreFeatures.perDiem.subtitle'),
+                        icon: illustrations.PerDiem,
+                    };
                 case CONST.POLICY.MORE_FEATURES.IS_TIME_TRACKING_ENABLED:
-                    return {...feature, title: translate('workspace.moreFeatures.timeTracking.title'), icon: illustrations.Clock};
+                    return {
+                        ...feature,
+                        title: translate('workspace.moreFeatures.timeTracking.title'),
+                        subtitle: translate('workspace.moreFeatures.timeTracking.subtitle'),
+                        icon: illustrations.Clock,
+                    };
                 default:
                     return {...feature, title: feature.id, icon: illustrations.FolderOpen};
             }
@@ -110,7 +165,6 @@ function BaseOnboardingInterestedFeatures({shouldUseNativeStyles}: BaseOnboardin
         return Array.from(selectedFeatureIDs ?? new Set(persistedSelectedFeatures ?? defaultSelectedFeatures));
     }, [defaultSelectedFeatures, persistedSelectedFeatures, selectedFeatureIDs]);
     const isAccountingEnabled = selectedFeatures.includes(CONST.POLICY.MORE_FEATURES.ARE_CONNECTIONS_ENABLED);
-    const onboardingStep = useOnboardingStepCounter(SCREENS.ONBOARDING.INTERESTED_FEATURES, {isAccountingEnabled});
 
     // Set onboardingPolicyID and onboardingAdminsChatReportID if a workspace is created by the backend for OD signup
     useEffect(() => {
@@ -142,11 +196,12 @@ function BaseOnboardingInterestedFeatures({shouldUseNativeStyles}: BaseOnboardin
         await completeOnboardingFlow({featuresMap});
     }, [completeOnboardingFlow, features, isAccountingEnabled, selectedFeatures]);
 
-    // Create items for enabled features
+    // Create items for enabled features, title-only per the mocks
     const enabledFeatures: Feature[] = features
         .filter((feature) => !!feature.enabledByDefault || feature.id === CONST.POLICY.MORE_FEATURES.ARE_CONNECTIONS_ENABLED)
         .map((feature) => ({
             ...feature,
+            subtitle: undefined,
         }));
 
     // Create items for features they may be interested in
@@ -194,33 +249,34 @@ function BaseOnboardingInterestedFeatures({shouldUseNativeStyles}: BaseOnboardin
                     }}
                     accessibilityLabel={item.title}
                     accessible={false}
-                    hoverStyle={styles.hoveredComponentBG}
+                    // Keep the selected fill on hover.
+                    hoverStyle={isSelected ? undefined : styles.hoveredComponentBG}
                     style={[
-                        styles.onboardingInterestedFeaturesItem,
-                        // 48.5% handles the gap between columns and keeps items aligned when the scrollbar appears
-                        isSmallScreenWidth ? styles.flexBasis100 : {flexBasis: '48.5%', maxWidth: '48.5%'},
+                        styles.onboardingTile,
+                        isSmallScreenWidth && !isInLandscapeMode ? styles.onboardingTileNarrow : styles.onboardingInterestedFeaturesItemWide,
+                        isSelected && styles.onboardingTileSelected,
                     ]}
                     sentryLabel={CONST.SENTRY_LABEL.ONBOARDING.INTERESTED_FEATURES_ITEM}
                 >
-                    <View style={[styles.flexRow, styles.alignItemsCenter, styles.gap3]}>
-                        <Icon
-                            src={item.icon}
-                            width={48}
-                            height={48}
-                        />
-                        <Text style={[styles.textStrong]}>{item.title}</Text>
-                    </View>
                     <Checkbox
                         accessibilityLabel={item.title}
                         isChecked={isSelected}
                         onPress={() => {
                             handleFeatureSelect(item.id);
                         }}
+                        wrapperStyle={styles.onboardingTileSelectionButton}
                     />
+                    <Icon
+                        src={item.icon}
+                        width={variables.iconSizeExtraLarge}
+                        height={variables.iconSizeExtraLarge}
+                    />
+                    <Text style={[styles.textStrong, styles.textAlignCenter, styles.mt2]}>{item.title}</Text>
+                    {!!item.subtitle && <Text style={[styles.textLabelSupporting, styles.textAlignCenter, styles.mt1]}>{item.subtitle}</Text>}
                 </PressableWithoutFeedback>
             );
         },
-        [styles, isSmallScreenWidth, selectedFeatures, handleFeatureSelect],
+        [styles, isSmallScreenWidth, isInLandscapeMode, selectedFeatures, handleFeatureSelect],
     );
 
     const renderSection = useCallback(
@@ -244,12 +300,7 @@ function BaseOnboardingInterestedFeatures({shouldUseNativeStyles}: BaseOnboardin
             style={[styles.defaultModalContainer, shouldUseNativeStyles && styles.pt8]}
             shouldEnableMaxHeight
         >
-            <HeaderWithBackButton
-                stepCounter={onboardingStep?.stepCounter}
-                progressBarPercentage={onboardingStep?.progressBarPercentage}
-                onBackButtonPress={() => Navigation.goBack(ROUTES.ONBOARDING_EMPLOYEES.getRoute())}
-                shouldDisplayHelpButton={false}
-            />
+            <OnboardingHeader onBackButtonPress={() => Navigation.goBack(ROUTES.ONBOARDING_EMPLOYEES.getRoute())} />
             <View style={[onboardingIsMediumOrLargerScreenWidth && styles.mt5, onboardingIsMediumOrLargerScreenWidth ? styles.mh8 : styles.mh5]}>
                 <Text
                     style={[styles.textHeadlineH1, styles.mb5]}

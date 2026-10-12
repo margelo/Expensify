@@ -18,6 +18,7 @@ import ROUTES from '@src/ROUTES';
 import type {PersonalDetailsForm} from '@src/types/form';
 import {isEmptyObject} from '@src/types/utils/EmptyObject';
 
+import {CONST as COMMON_CONST} from 'expensify-common';
 import React, {useEffect, useRef} from 'react';
 
 function PrivatePersonalDetailsConfirmValidateCodePage() {
@@ -58,7 +59,7 @@ function PrivatePersonalDetailsConfirmValidateCodePage() {
     }, [privatePersonalDetails?.isLoading, hasErrors]);
 
     // The parent page defers clearing the form draft to this page so the submission payload survives navigating
-    // to the magic-code RHP. Clear it whenever we leave this page without validating, so an unvalidated edit
+    // to the validateCode RHP. Clear it whenever we leave this page without validating, so an unvalidated edit
     // doesn't reappear in the RHP form on remount. This covers the header back arrow, swipe-back, and hardware
     // back, and is idempotent with the success path above (which already clears the draft before navigating away).
     useEffect(() => () => clearDraftValues(ONYXKEYS.FORMS.PERSONAL_DETAILS_FORM), []);
@@ -73,7 +74,8 @@ function PrivatePersonalDetailsConfirmValidateCodePage() {
         <ValidateCodeActionContent
             title={translate('delegate.makeSureItIsYou')}
             descriptionPrimary={translate('contacts.enterSecurityCode', primaryLogin ?? '')}
-            sendValidateCode={() => requestValidateCodeAction()}
+            sendValidateCode={() => requestValidateCodeAction({reasonCode: COMMON_CONST.VALIDATE_CODE_REASONS.UPDATE_PERSONAL_DETAILS})}
+            validateCodeReasonCode={COMMON_CONST.VALIDATE_CODE_REASONS.UPDATE_PERSONAL_DETAILS}
             validateCodeActionErrorField="personalDetails"
             handleSubmitForm={handleSubmitForm}
             validateError={submitError}

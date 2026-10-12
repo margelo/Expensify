@@ -1,20 +1,23 @@
+import type {CurrencyListActionsContextType} from '@hooks/useCurrencyList';
+
 import type {IOUAction, IOURequestType, IOUType} from '@src/CONST';
 import CONST from '@src/CONST';
-import ROUTES from '@src/ROUTES';
-import type {OnyxInputOrEntry, Policy, Report, ReportAction, Transaction} from '@src/types/onyx';
+import ROUTES, {DYNAMIC_ROUTES} from '@src/ROUTES';
+import type {OnyxInputOrEntry, Policy, Report, ReportAction, ReportNameValuePairs, Rule, Transaction} from '@src/types/onyx';
 import type {Attendee, Participant} from '@src/types/onyx/IOU';
 import type {CurrentUserPersonalDetails} from '@src/types/onyx/PersonalDetails';
 
-import type {OnyxEntry} from 'react-native-onyx';
+import type {OnyxCollection, OnyxEntry} from 'react-native-onyx';
 import type {ValueOf} from 'type-fest';
 
 import {SafeString} from 'expensify-common';
 
-import {getCurrencyUnit} from './CurrencyUtils';
+import createDynamicRoute from './Navigation/helpers/dynamicRoutesUtils/createDynamicRoute';
 import Navigation from './Navigation/Navigation';
 import {isGroupPolicy} from './PolicyUtils';
-import {getOriginalMessage, isMoneyRequestAction} from './ReportActionsUtils';
-import {generateReportID, getChatByParticipants, isProcessingReport, isReportOutstanding, isSelfDM} from './ReportUtils';
+import {getOriginalMessage} from './ReportActionMessageUtils';
+import {isMoneyRequestAction} from './ReportActionTypeGuards';
+import {canAddTransaction, generateReportID, getChatByParticipants, isArchivedReport, isSelfDM} from './ReportUtils';
 import {endSpan, getSpan, startSpan} from './telemetry/activeSpans';
 import {getTagArrayFromName, hasRoute, isDistanceRequest} from './TransactionUtils';
 
@@ -52,17 +55,31 @@ function navigateToStartMoneyRequestStep(requestType: IOURequestType, iouType: I
     }
 }
 
-function navigateToParticipantPage(iouType: ValueOf<typeof CONST.IOU.TYPE>, transactionID: string, reportID: string) {
+/**
+ * `request` and `send` are deprecated OldDot aliases of `submit` and `pay`. This resolves an
+ * alias to the type NewDot actually renders before building a route with it.
+ */
+function getNonDeprecatedIOUType(iouType: IOUType): IOUType {
     switch (iouType) {
         case CONST.IOU.TYPE.REQUEST:
-            Navigation.navigate(ROUTES.MONEY_REQUEST_STEP_PARTICIPANTS.getRoute(CONST.IOU.TYPE.SUBMIT, transactionID, reportID));
-            break;
+            return CONST.IOU.TYPE.SUBMIT;
         case CONST.IOU.TYPE.SEND:
-            Navigation.navigate(ROUTES.MONEY_REQUEST_STEP_PARTICIPANTS.getRoute(CONST.IOU.TYPE.PAY, transactionID, reportID));
-            break;
+            return CONST.IOU.TYPE.PAY;
         default:
-            Navigation.navigate(ROUTES.MONEY_REQUEST_STEP_PARTICIPANTS.getRoute(iouType, transactionID, reportID));
+            return iouType;
     }
+}
+
+function navigateToParticipantPage(iouType: ValueOf<typeof CONST.IOU.TYPE>, transactionID: string, reportID: string) {
+    const navigationIOUType = getNonDeprecatedIOUType(iouType);
+
+    // The base is explicit because the picker can be opened from a create tab, the Inbox or Search drop zone.
+    Navigation.navigate(
+        createDynamicRoute(
+            DYNAMIC_ROUTES.MONEY_REQUEST_STEP_PARTICIPANTS.getRoute({action: CONST.IOU.ACTION.CREATE, iouType: navigationIOUType, transactionID, reportID}),
+            ROUTES.MONEY_REQUEST_CREATE.getRoute(CONST.IOU.ACTION.CREATE, navigationIOUType, transactionID, reportID),
+        ),
+    );
 }
 
 /**
@@ -72,12 +89,20 @@ function navigateToParticipantPage(iouType: ValueOf<typeof CONST.IOU.TYPE>, tran
  * @param total - IOU total amount in backend format (cents, no matter the currency)
  * @param currency - Used to know how many decimal places are valid when splitting the total
  * @param isDefaultUser - Whether we are calculating the amount for the remainder holder
- * @param useFloorToLastRounding - `false` (default, legacy behavior) or `true` to floor all and put full remainder on the default user
+ * @param useFloorToLastRounding - `false` (legacy behavior) or `true` to floor all and put full remainder on the default user
+ * @param getCurrencyDecimals - Currency lookup supplied by React consumers.
  */
-function calculateAmount(numberOfSplits: number, total: number, currency: string, isDefaultUser = false, useFloorToLastRounding = false): number {
+function calculateAmount(
+    numberOfSplits: number,
+    total: number,
+    currency: string,
+    isDefaultUser: boolean,
+    useFloorToLastRounding: boolean,
+    getCurrencyDecimals: CurrencyListActionsContextType['getCurrencyDecimals'],
+): number {
     // Since the backend can maximum store 2 decimal places, any currency with more than 2 decimals
     // has to be capped to 2 decimal places
-    const currencyUnit = Math.min(100, getCurrencyUnit(currency));
+    const currencyUnit = Math.min(100, 10 ** getCurrencyDecimals(currency));
     const totalInCurrencySubunit = (total / 100) * currencyUnit;
     const totalParticipants = numberOfSplits + 1;
 
@@ -289,15 +314,21 @@ function isValidMoneyRequestType(iouType: string): boolean {
  * @param tag - a newly selected tag, that should be added to the transactionTags
  * @param tagIndex - the index of a tag list
  * @param hasMultipleTagLists - whether the policy has multiple levels tag
+ * @param tagListCount - the policy's current number of tag lists. When positive, values for tag lists the policy no longer has are dropped.
  * @returns
  */
-function insertTagIntoTransactionTagsString(transactionTags: string, tag: string, tagIndex: number, hasMultipleTagLists: boolean): string {
+function insertTagIntoTransactionTagsString(transactionTags: string, tag: string, tagIndex: number, hasMultipleTagLists: boolean, tagListCount?: number): string {
     if (!hasMultipleTagLists) {
         return tag;
     }
 
     const tagArray = transactionTags ? getTagArrayFromName(transactionTags) : [];
     tagArray[tagIndex] = tag;
+
+    // A removed tag list leaves its value in the stored string, which keeps the "Tag no longer valid" violation on the expense
+    if (tagListCount && tagListCount > 0 && tagArray.length > tagListCount) {
+        tagArray.length = tagListCount;
+    }
 
     // Fill any sparse slots created when tagIndex > tagArray.length
     for (let i = 0; i < tagArray.length; i++) {
@@ -488,11 +519,20 @@ function getInitialPerDiemTargetReport(
 /**
  * Resolves the chat report ID for navigation, generating an optimistic ID if no existing chat is found.
  */
-function resolveOptimisticChatReportID(participantAccountIDs: number[], existingReport?: OnyxInputOrEntry<Report>) {
+function resolveOptimisticChatReportID(participantAccountIDs: number[], existingReport?: OnyxInputOrEntry<Report>, optimisticChatReportID?: string) {
     const existingChat = existingReport?.reportID ? existingReport : getChatByParticipants(participantAccountIDs);
-    const optimisticChatReportID = existingChat?.reportID ? undefined : generateReportID();
-    const chatReportID = existingChat?.reportID ?? optimisticChatReportID;
-    return {optimisticChatReportID, chatReportID};
+    if (existingChat?.reportID) {
+        return {optimisticChatReportID: undefined, chatReportID: existingChat.reportID};
+    }
+
+    const chatReportID = optimisticChatReportID ?? generateReportID();
+    return {optimisticChatReportID: chatReportID, chatReportID};
+}
+
+/** Returns `transactionReportID` if the participant isn't a workspace and has no existing chat, so the ID can be reused for their new chat report; otherwise undefined. */
+function getReusableP2PReportID(participant: Participant, transactionReportID: string | undefined): string | undefined {
+    const isBrandNewP2PRecipient = !participant.isPolicyExpenseChat && !participant.reportID;
+    return isBrandNewP2PRecipient && !!transactionReportID && transactionReportID !== CONST.REPORT.UNREPORTED_REPORT_ID ? transactionReportID : undefined;
 }
 
 /**
@@ -537,22 +577,33 @@ function pickReportForPolicy(...reports: Array<OnyxEntry<Report>>): OnyxEntry<Re
     return reports.find((report) => reportHasRealPolicy(report)) ?? reports.find((report) => !!report);
 }
 
+/** The policyID of the workspace the user explicitly picked for this expense, taken from the transaction participants. */
+function getSelectedWorkspacePolicyID(transaction: OnyxEntry<Transaction>, action: IOUAction): string | undefined {
+    if (action === CONST.IOU.ACTION.EDIT) {
+        return undefined;
+    }
+
+    return transaction?.participants?.find((participant) => participant?.isSender)?.policyID ?? transaction?.participants?.find((participant) => participant?.isPolicyExpenseChat)?.policyID;
+}
+
 /** Resolves which Report should receive a money-request: the picked transaction report when usable, undefined to force a new optimistic IOU, otherwise the route report. */
 function resolveReportForMoneyRequest({
     transaction,
     transactionReport,
     routeReport,
-    policy,
+    reportNameValuePair,
+    rules,
 }: {
     transaction: OnyxEntry<Transaction>;
     transactionReport: OnyxEntry<Report>;
     routeReport: OnyxEntry<Report>;
-    policy: OnyxEntry<Policy>;
+    reportNameValuePair: OnyxInputOrEntry<ReportNameValuePairs>;
+    rules: OnyxCollection<Rule>;
 }): OnyxEntry<Report> {
     if (transaction?.reportID === CONST.REPORT.UNREPORTED_REPORT_ID) {
         return undefined;
     }
-    const canUseTransactionReport = !(isProcessingReport(transactionReport) && !policy?.harvesting?.enabled) && isReportOutstanding(transactionReport, policy?.id, undefined, false);
+    const canUseTransactionReport = canAddTransaction(transactionReport, rules, isArchivedReport(reportNameValuePair), false);
     const shouldUseTransactionReport = !!transactionReport && (canUseTransactionReport || !routeReport);
     if (shouldUseTransactionReport) {
         return transactionReport;
@@ -600,6 +651,16 @@ function isSelfDMSoleDestination(participants: Participant[], iouType: IOUType, 
 }
 
 /**
+ * Single source of truth for whether a LOOKING_AROUND user's self-DM create routes to Spend > Expenses (Search).
+ * Suppressed offline because Search reads a server-populated snapshot that can't load offline (would render empty),
+ * so offline these users fall back to the self-DM (Personal Space) landing. Every create path calls this so the
+ * pre-mount / dismiss / final-landing decisions can't disagree.
+ */
+function isLookingAroundSearchRoutingActive(isLookingAroundUser: boolean | undefined, isOffline: boolean | undefined): boolean {
+    return !!isLookingAroundUser && !isOffline;
+}
+
+/**
  * Resolves the reportID that should be set on the transaction draft for
  * global-create flows with default participants. Returns undefined when
  * no early set is needed (non-global-create or empty participants).
@@ -620,6 +681,7 @@ export {
     calculateSplitAmountFromPercentage,
     calculateSplitPercentagesFromAmounts,
     getExistingTransactionID,
+    getNonDeprecatedIOUType,
     insertTagIntoTransactionTagsString,
     isMovingTransactionFromTrackExpense,
     shouldUseTransactionDraft,
@@ -634,11 +696,14 @@ export {
     calculateDefaultReimbursable,
     getInitialPerDiemTargetReport,
     getIsWorkspacesOnlyForTransaction,
+    getReusableP2PReportID,
     isParticipantP2P,
     isSelfDMSoleDestination,
+    isLookingAroundSearchRoutingActive,
     resolveOptimisticChatReportID,
     resolveReportForMoneyRequest,
     resolveEarlyReportID,
     reportHasRealPolicy,
     pickReportForPolicy,
+    getSelectedWorkspacePolicyID,
 };

@@ -3,9 +3,10 @@ import type {SecondaryActionEntry} from '@components/MoneyReportHeaderActions/ty
 import type {RejectModalAction} from '@components/MoneyReportHeaderEducationalModals';
 import {useMoneyReportTransactionThread} from '@components/MoneyReportTransactionThreadContext';
 
+import {changeMoneyRequestHoldStatus} from '@libs/actions/IOU/Hold';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import Navigation from '@libs/Navigation/Navigation';
-import {changeMoneyRequestHoldStatus, isCurrentUserSubmitter, isDM} from '@libs/ReportUtils';
+import {isCurrentUserSubmitter, isDM} from '@libs/ReportUtils';
 
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
@@ -16,6 +17,7 @@ import type {ValueOf} from 'type-fest';
 import {isTrackIntentUserSelector} from '@selectors/Onboarding';
 
 import useCurrentUserPersonalDetails from './useCurrentUserPersonalDetails';
+import useDelegateAccountID from './useDelegateAccountID';
 import useGetIOUReportFromReportAction from './useGetIOUReportFromReportAction';
 import {useMemoizedLazyExpensifyIcons} from './useLazyAsset';
 import useLocalize from './useLocalize';
@@ -44,8 +46,10 @@ function useHoldRejectActions({reportID, onHoldEducationalOpen, onRejectModalOpe
 
     const [moneyRequestReport] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${reportID}`);
     const [chatReport] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${getNonEmptyStringOnyxID(moneyRequestReport?.chatReportID)}`);
+    const [policy] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY}${getNonEmptyStringOnyxID(moneyRequestReport?.policyID)}`);
     const {iouTransactionID, requestParentReportAction} = useMoneyReportTransactionThread();
     const {login: currentUserLogin, accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
+    const delegateAccountID = useDelegateAccountID();
 
     const {chatReport: chatIOUReport} = useGetIOUReportFromReportAction(requestParentReportAction);
 
@@ -55,6 +59,7 @@ function useHoldRejectActions({reportID, onHoldEducationalOpen, onRejectModalOpe
     const [dismissedRejectUseExplanation] = useOnyx(ONYXKEYS.NVP_DISMISSED_REJECT_USE_EXPLANATION);
     const [dismissedHoldUseExplanation] = useOnyx(ONYXKEYS.NVP_DISMISSED_HOLD_USE_EXPLANATION);
     const [isTrackIntentUser] = useOnyx(ONYXKEYS.NVP_INTRO_SELECTED, {selector: isTrackIntentUserSelector});
+    const [rules] = useOnyx(ONYXKEYS.COLLECTION.RULE);
     const shouldSuppressPromotionalUI = useShouldSuppressPromotionalUI();
 
     const isReportSubmitter = isCurrentUserSubmitter(chatIOUReport);
@@ -80,7 +85,18 @@ function useHoldRejectActions({reportID, onHoldEducationalOpen, onRejectModalOpe
                 const isDismissed = shouldShowHoldEducationalModal ? dismissedHoldUseExplanation : dismissedRejectUseExplanation;
 
                 if (isDismissed || shouldSuppressPromotionalUI) {
-                    changeMoneyRequestHoldStatus(requestParentReportAction, transaction, isOffline, currentUserLogin ?? '', currentUserAccountID, transactionViolations, isTrackIntentUser);
+                    changeMoneyRequestHoldStatus(
+                        requestParentReportAction,
+                        transaction,
+                        policy,
+                        isOffline,
+                        currentUserLogin ?? '',
+                        currentUserAccountID,
+                        transactionViolations,
+                        isTrackIntentUser,
+                        delegateAccountID,
+                        rules,
+                    );
                 } else if (shouldShowHoldEducationalModal) {
                     onHoldEducationalOpen();
                 } else {
@@ -103,7 +119,18 @@ function useHoldRejectActions({reportID, onHoldEducationalOpen, onRejectModalOpe
                     return;
                 }
 
-                changeMoneyRequestHoldStatus(requestParentReportAction, transaction, isOffline, currentUserLogin ?? '', currentUserAccountID, transactionViolations, isTrackIntentUser);
+                changeMoneyRequestHoldStatus(
+                    requestParentReportAction,
+                    transaction,
+                    policy,
+                    isOffline,
+                    currentUserLogin ?? '',
+                    currentUserAccountID,
+                    transactionViolations,
+                    isTrackIntentUser,
+                    delegateAccountID,
+                    rules,
+                );
             },
         },
         [CONST.REPORT.SECONDARY_ACTIONS.REJECT]: {

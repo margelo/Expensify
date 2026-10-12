@@ -27,17 +27,13 @@ import {isEmptyObject} from '@src/types/utils/EmptyObject';
 
 import type {ViewStyle} from 'react-native';
 
+import {accountIDSelector} from '@selectors/Session';
 import React from 'react';
 import {View} from 'react-native';
 
 type TransactionItemRowRBRInnerProps = {
-    /** Transaction item */
     transaction: Transaction;
-
-    /** Transaction violations */
     violations?: TransactionViolation[];
-
-    /** Report item */
     report?: Report;
 
     /** Styles for the RBR messages container */
@@ -57,13 +53,14 @@ type TransactionItemRowRBRProps = TransactionItemRowRBRInnerProps & {
 
 function TransactionItemRowRBRInner({transaction, violations, report, containerStyles, missingFieldError, shouldUseNarrowLayout}: TransactionItemRowRBRInnerProps) {
     const styles = useThemeStyles();
-    const {translate} = useLocalize();
+    const {translate, dateFnsLocale} = useLocalize();
     const {convertToDisplayString} = useCurrencyListActions();
     const theme = useTheme();
     const {environmentURL} = useEnvironment();
     const [reportActions] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${transaction.reportID}`);
     const [parentReport] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${report?.parentReportID}`);
     const [policy] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY}${report?.policyID}`);
+    const [policyVendors] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY_VENDORS}${report?.policyID}`);
     const companyCardPageURL = `${environmentURL}/${ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(report?.policyID)}`;
     const [policyTags] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY_TAGS}${report?.policyID}`);
     const [cardList] = useOnyx(ONYXKEYS.CARD_LIST);
@@ -72,10 +69,12 @@ function TransactionItemRowRBRInner({transaction, violations, report, containerS
     const transactionThreadId = iouAction?.childReportID;
     const [transactionThreadActions] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${transactionThreadId}`);
     const {login: currentUserLogin} = useCurrentUserPersonalDetails();
+    const [currentUserAccountID = CONST.DEFAULT_NUMBER_ID] = useOnyx(ONYXKEYS.SESSION, {selector: accountIDSelector});
     const isMarkAsCash = parentReport && currentUserLogin && violations ? isMarkAsCashActionForTransaction(currentUserLogin, parentReport, violations, policy) : false;
 
-    const canEdit = wasActionTakenByCurrentUser(iouAction);
+    const canEdit = wasActionTakenByCurrentUser(iouAction, currentUserAccountID);
     const RBRMessages = ViolationsUtils.getRBRMessages({
+        dateFnsLocale,
         transaction,
         transactionViolations: isSettled(report) ? [] : (violations ?? []),
         translate,
@@ -87,6 +86,7 @@ function TransactionItemRowRBRInner({transaction, violations, report, containerS
         cardList,
         isMarkAsCash: isMarkAsCash || undefined,
         canEdit,
+        policyVendors,
     });
     const hasHTMLTags = CONST.HTML_TAG_REGEX.test(RBRMessages);
 

@@ -2,14 +2,17 @@ import {useFullScreenLoaderActions} from '@components/FullScreenLoaderContext';
 import withCurrentUserPersonalDetails from '@components/withCurrentUserPersonalDetails';
 import type {WithCurrentUserPersonalDetailsProps} from '@components/withCurrentUserPersonalDetails';
 
+import {useCurrencyListActions} from '@hooks/useCurrencyList';
 import useDelegateAccountID from '@hooks/useDelegateAccountID';
 import useFilesValidation from '@hooks/useFilesValidation';
 import useLocalize from '@hooks/useLocalize';
 import useMoneyRequestPolicyTagsForReport from '@hooks/useMoneyRequestPolicyTagsForReport';
+import useNetwork from '@hooks/useNetwork';
 import useOnyx from '@hooks/useOnyx';
 import useOptimisticDraftTransactions from '@hooks/useOptimisticDraftTransactions';
 import useParticipantsPolicyTags from '@hooks/useParticipantsPolicyTags';
 import usePermissions from '@hooks/usePermissions';
+import {useAllPersonalDetails} from '@hooks/usePersonalDetails';
 import usePolicy from '@hooks/usePolicy';
 import usePolicyForMovingExpenses from '@hooks/usePolicyForMovingExpenses';
 import usePreMountDestination from '@hooks/usePreMountDestination';
@@ -18,15 +21,14 @@ import useReportIsArchived from '@hooks/useReportIsArchived';
 import useSelfDMReport from '@hooks/useSelfDMReport';
 
 import {createTransaction, getMoneyRequestParticipantOptions} from '@libs/actions/IOU/MoneyRequest';
-import {startSplitBill} from '@libs/actions/IOU/Split';
-import {clearUserLocation, setUserLocation} from '@libs/actions/UserLocation';
-import getCurrentPosition from '@libs/getCurrentPosition';
-import {calculateDefaultReimbursable, getExistingTransactionID} from '@libs/IOUUtils';
-import Log from '@libs/Log';
+import {resolveOptimisticSplitChatReportID, startSplitBill} from '@libs/actions/IOU/Split';
+import getCurrentPositionWithinCap from '@libs/getCurrentPosition/getCurrentPositionWithinCap';
+import {calculateDefaultReimbursable, getExistingTransactionID, isLookingAroundSearchRoutingActive, isSelfDMSoleDestination} from '@libs/IOUUtils';
 import cleanupAfterSkipConfirmSubmit from '@libs/Navigation/helpers/cleanupAfterSkipConfirmSubmit';
 import {submitWithDismissFirst} from '@libs/Navigation/helpers/submitWithDismissFirst';
 import {rand64} from '@libs/NumberUtils';
 import {isTrackOnboardingChoice} from '@libs/OnboardingUtils';
+import {resolveCurrentTaxCode} from '@libs/PolicyUtils';
 import {isMoneyRequestReport as isMoneyRequestReportReportUtils} from '@libs/ReportUtils';
 import {cancelSpan} from '@libs/telemetry/activeSpans';
 import type {ReceiptCaptureSource} from '@libs/telemetry/ReceiptObservability';
@@ -34,7 +36,7 @@ import {getPickerCaptureSource} from '@libs/telemetry/ReceiptObservability';
 import {getDefaultTaxCode, getIsFromGlobalCreate, getTaxValue} from '@libs/TransactionUtils';
 
 import getSkipConfirmationPreMountDestinationRoute from '@pages/iou/request/step/confirmation/getSkipConfirmationPreMountDestinationRoute';
-import {getLocationPermission} from '@pages/iou/request/step/IOURequestStepScan/LocationPermission';
+import hasLocationPermission from '@pages/iou/request/step/IOURequestStepScan/LocationPermission/hasLocationPermission';
 import type {ReceiptFile} from '@pages/iou/request/step/IOURequestStepScan/types';
 import buildReceiptFiles from '@pages/iou/request/step/IOURequestStepScan/utils/buildReceiptFiles';
 import getFileSource from '@pages/iou/request/step/IOURequestStepScan/utils/getFileSource';
@@ -52,13 +54,10 @@ import type {FileObject} from '@src/types/utils/Attachment';
 
 import type {OnyxEntry} from 'react-native-onyx';
 
-import shouldStartLocationPermissionFlowSelector from '@selectors/LocationPermission';
 import {hasSeenTourSelector} from '@selectors/Onboarding';
-import React, {useEffect, useState} from 'react';
-import {RESULTS} from 'react-native-permissions';
+import React, {useState} from 'react';
 
 import Camera from './Camera';
-import GpsPermissionGate from './GpsPermissionGate';
 import {useMultiScanActions, useMultiScanState} from './MultiScanContext';
 
 type ScanSkipConfirmationProps = WithCurrentUserPersonalDetailsProps & {
@@ -82,97 +81,76 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
     const isArchived = useReportIsArchived(report?.reportID);
     const selfDMReport = useSelfDMReport();
     const reportAttributesDerived = useReportAttributes();
-    const {isBetaEnabled} = usePermissions();
+    const {isBetaEnabled, isBetaEnabledOrUnknown} = usePermissions();
+    const isVendorMatchingBetaEnabled = isBetaEnabledOrUnknown(CONST.BETAS.VENDOR_MATCHING);
     const delegateAccountID = useDelegateAccountID();
     const isASAPSubmitBetaEnabled = isBetaEnabled(CONST.BETAS.ASAP_SUBMIT);
 
-    const [personalDetails] = useOnyx(ONYXKEYS.PERSONAL_DETAILS_LIST);
+    const [personalDetails] = useAllPersonalDetails();
     const [quickAction] = useOnyx(ONYXKEYS.NVP_QUICK_ACTION_GLOBAL_CREATE);
     const [policyRecentlyUsedCurrencies] = useOnyx(ONYXKEYS.RECENTLY_USED_CURRENCIES);
     const [introSelected] = useOnyx(ONYXKEYS.NVP_INTRO_SELECTED);
     const [activePolicyID] = useOnyx(ONYXKEYS.NVP_ACTIVE_POLICY_ID);
     const [isSelfTourViewed = false] = useOnyx(ONYXKEYS.NVP_ONBOARDING, {selector: hasSeenTourSelector});
-    const [betas] = useOnyx(ONYXKEYS.BETAS);
     const [transactionViolations] = useOnyx(ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS);
     const [recentWaypoints] = useOnyx(ONYXKEYS.NVP_RECENT_WAYPOINTS);
     const [conciergeReportID] = useOnyx(ONYXKEYS.CONCIERGE_REPORT_ID);
+    const [conciergeChat] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${conciergeReportID}`);
+    const [rules] = useOnyx(ONYXKEYS.COLLECTION.RULE);
     const reportIDToCheck = isMoneyRequestReportReportUtils(report) ? report?.chatReportID : report?.reportID;
     const [reportDraft] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_DRAFT}${reportIDToCheck}`);
     const [allTransactionDrafts] = useOnyx(ONYXKEYS.COLLECTION.TRANSACTION_DRAFT, {selector: validTransactionDraftsSelector});
     const [draftTransactionIDs] = useOnyx(ONYXKEYS.COLLECTION.TRANSACTION_DRAFT, {
         selector: validTransactionDraftIDsSelector,
     });
-    const [shouldStartLocationPermissionFlow] = useOnyx(ONYXKEYS.NVP_LAST_LOCATION_PERMISSION_PROMPT, {
-        selector: shouldStartLocationPermissionFlowSelector,
-    });
+    const [userLocation] = useOnyx(ONYXKEYS.USER_LOCATION);
     const isTrackIntentUser = isTrackOnboardingChoice(introSelected?.choice);
+    const {isOffline} = useNetwork();
+    const isLookingAroundUser = isLookingAroundSearchRoutingActive(introSelected?.choice === CONST.ONBOARDING_CHOICES.LOOKING_AROUND, isOffline);
 
     const [transactions] = useOptimisticDraftTransactions(transaction);
     const {isMultiScanEnabled} = useMultiScanState();
-    const {translate, formatPhoneNumber} = useLocalize();
+    const {translate, formatPhoneNumber, dateFnsLocale} = useLocalize();
+    const {convertToDisplayString, getCurrencyDecimals} = useCurrencyListActions();
     const {disableMultiScan} = useMultiScanActions();
     const {setIsLoaderVisible} = useFullScreenLoaderActions();
-    const [startLocationPermissionFlow, setStartLocationPermissionFlow] = useState(false);
     const [receiptFiles, setReceiptFiles] = useState<ReceiptFile[]>([]);
 
-    const participants = getMoneyRequestParticipantOptions(
-        currentUserPersonalDetails.accountID,
+    const participants = getMoneyRequestParticipantOptions({
+        currentUserAccountID: currentUserPersonalDetails.accountID,
         report,
         policy,
         personalDetails,
         conciergeReportID,
-        isArchived,
+        privateIsArchived: isArchived,
+        rules,
         reportAttributesDerived,
         reportDraft,
         translate,
-    );
+        convertToDisplayString,
+        dateFnsLocale,
+    });
     const participantsPolicyTags = useParticipantsPolicyTags(participants);
 
+    // Whether this expense's sole destination is the current user's self-DM. Forwarded to the cleanup helpers so the
+    // LOOKING_AROUND "route to Spend > Expenses" behaviour is scoped to the self-DM case (matches the confirmation step).
+    // Unlike the quick-action amount/distance paths (which OR in isSelfDM(report) as a fallback), participants are already
+    // populated at component level here via getMoneyRequestParticipantOptions, so isSelfDMSoleDestination alone is sufficient.
+    const isSelfDMDestination = isSelfDMSoleDestination(participants, iouType, currentUserPersonalDetails.accountID);
+
     const defaultTaxCode = getDefaultTaxCode(policy, transaction);
-    const transactionTaxCode = (transaction?.taxCode ? transaction.taxCode : defaultTaxCode) ?? '';
+    const transactionTaxCode = resolveCurrentTaxCode(policy, (transaction?.taxCode ? transaction.taxCode : defaultTaxCode) ?? '');
     const transactionTaxAmount = transaction?.taxAmount ?? 0;
     const transactionTaxValue = transaction?.taxValue ?? getTaxValue(policy, transaction, transactionTaxCode) ?? '';
 
     useScanFileReadabilityCheck(transactions, draftTransactionIDs ?? [], disableMultiScan);
 
     const preInsertReportID = iouType === CONST.IOU.TYPE.TRACK ? (report?.reportID ?? selfDMReport?.reportID) : report?.reportID;
-    const skipConfirmationPreMountRoute = getSkipConfirmationPreMountDestinationRoute(true, preInsertReportID);
+    const skipConfirmationPreMountRoute = getSkipConfirmationPreMountDestinationRoute(true, preInsertReportID, isLookingAroundUser, isSelfDMDestination);
     usePreMountDestination(skipConfirmationPreMountRoute);
 
-    // Pre-fetch location if GPS is required and permission is already granted
-    useEffect(() => {
-        let ignore = false;
-        const gpsRequired = transaction?.amount === 0 && iouType !== CONST.IOU.TYPE.SPLIT;
-        if (!gpsRequired) {
-            return;
-        }
-
-        getLocationPermission().then((status) => {
-            if (ignore || (status !== RESULTS.GRANTED && status !== RESULTS.LIMITED)) {
-                return;
-            }
-
-            clearUserLocation();
-            getCurrentPosition(
-                (successData) => {
-                    if (ignore) {
-                        return;
-                    }
-                    setUserLocation({
-                        longitude: successData.coords.longitude,
-                        latitude: successData.coords.latitude,
-                    });
-                },
-                () => {},
-            );
-        });
-
-        return () => {
-            ignore = true;
-        };
-    }, [transaction?.amount, iouType]);
-
     const cancelShutterSpans = () => {
+        cancelSpan(CONST.TELEMETRY.SPAN_RECEIPT_PREPARE);
         cancelSpan(CONST.TELEMETRY.SPAN_SCAN_PROCESS_AND_NAVIGATE);
         cancelSpan(CONST.TELEMETRY.SPAN_CONFIRMATION_MOUNT);
         cancelSpan(CONST.TELEMETRY.SPAN_SHUTTER_TO_CONFIRMATION);
@@ -210,6 +188,7 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
             splitReceipt.source = firstReceiptFile.source;
             splitReceipt.state = CONST.IOU.RECEIPT_STATE.SCAN_READY;
 
+            const {optimisticSplitChatReportID, chatReportID: splitChatReportID} = resolveOptimisticSplitChatReportID(reportID, participants, currentUserPersonalDetails.accountID);
             const splitBaseParams = {
                 participants,
                 currentUserLogin: currentUserPersonalDetails.login ?? '',
@@ -235,9 +214,10 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
             submitWithDismissFirst({
                 executeWrite: (overrides) => {
                     startSplitBill({
+                        getCurrencyDecimals,
                         ...splitBaseParams,
-                        shouldHandleNavigation: overrides.shouldHandleNavigation,
-                        shouldDeferForSearch: false,
+                        optimisticSplitChatReportID,
+                        isFirstSplitInBatch: true,
                     });
                     cleanupAfterSkipConfirmSubmit(overrides.shouldHandleNavigation, {
                         report,
@@ -246,8 +226,10 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
                         transactionID: getExistingTransactionID(linkedTrackedExpenseReportAction) ?? lastOptimisticTransactionID,
                         isFromGlobalCreate,
                         backToReport,
-                        optimisticChatReportID: chatReportID,
+                        optimisticChatReportID: splitChatReportID,
                         linkedTrackedExpenseReportAction,
+                        isLookingAroundUser,
+                        isSelfDMDestination,
                     });
                 },
                 destinationReportID: reportID,
@@ -276,6 +258,8 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
         });
 
         const baseParams = {
+            isVendorMatchingBetaEnabled,
+            getCurrencyDecimals,
             transactions,
             iouType,
             report,
@@ -296,18 +280,24 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
             reimbursable: defaultReimbursable,
             isSelfTourViewed,
             allTransactionDrafts,
-            betas,
             personalDetails,
             recentWaypoints,
             optimisticTransactionIDs,
             optimisticChatReportID,
             currentUserLocalCurrency: currentUserPersonalDetails.localCurrencyCode ?? CONST.CURRENCY.USD,
+            isDraftChatReport: !!reportDraft,
             isTrackIntentUser,
             delegateAccountID,
+            conciergeChat,
+            formatPhoneNumber,
+            rules,
         };
 
         const scanDestinationReportID = iouType === CONST.IOU.TYPE.TRACK ? (report?.reportID ?? selfDMReport?.reportID) : report?.reportID;
         submitWithDismissFirst({
+            isFromGlobalCreate,
+            isLookingAroundUser,
+            isSelfDMDestination,
             executeWrite: (overrides) => {
                 // Cleanup runs after each write (not once up front) so a stalled GPS lookup can't clear the draft before the expense exists.
                 const runCleanup = () =>
@@ -320,27 +310,27 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
                         backToReport,
                         optimisticChatReportID: chatReportID,
                         linkedTrackedExpenseReportAction,
+                        isLookingAroundUser,
+                        isSelfDMDestination,
                     });
 
                 if (locationPermissionGranted) {
-                    getCurrentPosition(
-                        (successData) => {
-                            createTransaction({
-                                ...baseParams,
-                                gpsPoint: {
-                                    lat: successData.coords.latitude,
-                                    long: successData.coords.longitude,
-                                },
-                            });
-                            runCleanup();
-                        },
-                        (errorData) => {
-                            Log.info('[ScanSkipConfirmation] getCurrentPosition failed', false, errorData);
-                            // When there is an error, the money can still be requested, it just won't include the GPS coordinates
-                            createTransaction(baseParams);
-                            runCleanup();
-                        },
-                    );
+                    if (userLocation) {
+                        createTransaction({
+                            ...baseParams,
+                            gpsPoint: {
+                                lat: userLocation.latitude,
+                                long: userLocation.longitude,
+                            },
+                        });
+                        runCleanup();
+                        return;
+                    }
+
+                    getCurrentPositionWithinCap((gpsCoords) => {
+                        createTransaction(gpsCoords ? {...baseParams, gpsPoint: gpsCoords} : baseParams);
+                        runCleanup();
+                    });
                     return;
                 }
                 createTransaction(baseParams);
@@ -359,15 +349,11 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
 
     const submitWithGpsCheck = (files: ReceiptFile[]) => {
         const gpsRequired = transaction?.amount === 0 && iouType !== CONST.IOU.TYPE.SPLIT;
-        if (gpsRequired) {
-            if (shouldStartLocationPermissionFlow) {
-                setStartLocationPermissionFlow(true);
-                return;
-            }
-            submitDirectly(files, true);
+        if (!gpsRequired) {
+            submitDirectly(files, false);
             return;
         }
-        submitDirectly(files, false);
+        hasLocationPermission().then((isGranted) => submitDirectly(files, isGranted));
     };
 
     const processReceipts = (files: FileObject[], captureSource: ReceiptCaptureSource) => {
@@ -376,7 +362,6 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
             getFileSource,
             initialTransaction: transaction,
             initialTransactionID: transactionID,
-            currentUserPersonalDetails,
             reportID,
             shouldAcceptMultipleFiles: true,
             isMultiScanEnabled,
@@ -406,7 +391,7 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
         submitWithGpsCheck(validReceiptFiles);
     };
 
-    const {validateFiles, PDFValidationComponent, ErrorModal} = useFilesValidation((files: FileObject[]) => {
+    const {validateFiles, PDFValidationComponent} = useFilesValidation((files: FileObject[]) => {
         processReceipts(files, getPickerCaptureSource());
     });
 
@@ -421,13 +406,7 @@ function ScanSkipConfirmation({report, action, iouType, reportID, transactionID,
                 onAttachmentPickerStatusChange={setIsLoaderVisible}
                 onMultiScanSubmit={submitMultiScan}
                 shouldAcceptMultipleFiles
-            />
-            {ErrorModal}
-            <GpsPermissionGate
-                startLocationPermissionFlow={startLocationPermissionFlow}
-                receiptFiles={receiptFiles}
-                resetPermissionFlow={() => setStartLocationPermissionFlow(false)}
-                onComplete={submitDirectly}
+                canUpgradeReceiptQuality={false}
             />
         </>
     );

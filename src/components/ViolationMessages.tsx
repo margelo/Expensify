@@ -6,7 +6,7 @@ import useThemeStyles from '@hooks/useThemeStyles';
 import ViolationsUtils, {filterReceiptViolations} from '@libs/Violations/ViolationsUtils';
 
 import ONYXKEYS from '@src/ONYXKEYS';
-import type {TransactionViolation} from '@src/types/onyx';
+import type {PolicyVendors, TransactionViolation} from '@src/types/onyx';
 import type {Unit} from '@src/types/onyx/Policy';
 
 import type {StyleProp, TextStyle, ViewStyle} from 'react-native';
@@ -25,8 +25,10 @@ type ViolationMessagesProps = {
     canEdit: boolean;
     companyCardPageURL?: string;
     connectionLink?: string;
-    routeDistanceMeters?: number;
+    routeDistanceMeters?: number | null;
     distanceUnit?: Unit;
+    policyVendors?: PolicyVendors;
+    transactionCurrency?: string;
 };
 
 export default function ViolationMessages({
@@ -40,9 +42,11 @@ export default function ViolationMessages({
     isMarkAsCash,
     routeDistanceMeters,
     distanceUnit,
+    policyVendors,
+    transactionCurrency,
 }: ViolationMessagesProps) {
     const styles = useThemeStyles();
-    const {translate} = useLocalize();
+    const {translate, dateFnsLocale} = useLocalize();
     const {convertToDisplayString} = useCurrencyListActions();
     const [cardList] = useOnyx(ONYXKEYS.CARD_LIST);
 
@@ -56,6 +60,7 @@ export default function ViolationMessages({
                 return [
                     violation.name,
                     ViolationsUtils.getViolationTranslation({
+                        dateFnsLocale,
                         violation,
                         translate,
                         convertToDisplayString,
@@ -66,10 +71,26 @@ export default function ViolationMessages({
                         isMarkAsCash,
                         routeDistanceMeters,
                         distanceUnit,
+                        policyVendors,
+                        transactionCurrency,
                     }),
                 ];
             }),
-        [canEdit, translate, convertToDisplayString, filteredViolations, companyCardPageURL, connectionLink, cardList, isMarkAsCash, routeDistanceMeters, distanceUnit],
+        [
+            canEdit,
+            translate,
+            convertToDisplayString,
+            filteredViolations,
+            companyCardPageURL,
+            connectionLink,
+            cardList,
+            isMarkAsCash,
+            routeDistanceMeters,
+            distanceUnit,
+            policyVendors,
+            transactionCurrency,
+            dateFnsLocale,
+        ],
     );
 
     return (

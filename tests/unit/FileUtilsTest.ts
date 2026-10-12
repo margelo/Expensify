@@ -5,20 +5,29 @@ import {
     ANDROID_SAFE_FILE_NAME_LENGTH,
     appendTimeToFileName,
     canvasFallback,
+    createFile,
     getExportFileName,
+    getFileNameWithFallback,
     getFileValidationErrorText,
     getImageDimensionsAfterResize,
     isHighResolutionImage,
+    resizeImageIfNeeded,
     splitExtensionFromFileName,
 } from '@libs/fileDownload/FileUtils';
+import getImageManipulator from '@libs/fileDownload/getImageManipulator';
+import getPlatform from '@libs/getPlatform';
 
 import CONST from '@src/CONST';
 
 import {Platform} from 'react-native';
 import ImageSize from 'react-native-image-size';
 
+import createMock from '../utils/createMock';
+
 jest.useFakeTimers();
 jest.mock('react-native-image-size');
+jest.mock('@libs/fileDownload/getImageManipulator', () => jest.fn());
+jest.mock('@libs/getPlatform', () => jest.fn());
 
 const createFileNameFromLength = ({length, extension}: {length: number; extension?: string | undefined}): string => `${'a'.repeat(length)}${extension ? `.${extension}` : ''}`;
 
@@ -40,6 +49,28 @@ describe('FileUtils', () => {
             const file = splitExtensionFromFileName('image');
             expect(file.fileName).toEqual('image');
             expect(file.fileExtension).toEqual('');
+        });
+    });
+
+    describe('getFileNameWithFallback', () => {
+        it('should return the given file name when there is one', () => {
+            expect(getFileNameWithFallback('statement.qfx', 'file:///tmp/other.csv', 'spreadsheet')).toEqual('statement.qfx');
+        });
+
+        it('should read the file name from the URI when the picker returns no name', () => {
+            expect(getFileNameWithFallback(null, 'file:///private/var/mobile/Containers/Data/Application/ABC/tmp/statement.qfx', 'spreadsheet')).toEqual('statement.qfx');
+        });
+
+        it('should decode the file name read from the URI and replace illegal characters', () => {
+            expect(getFileNameWithFallback(null, 'file:///tmp/bank%20statement%3A2026.qfx', 'spreadsheet')).toEqual('bank statement_2026.qfx');
+        });
+
+        it('should return the default file name when the URI has no extension either', () => {
+            expect(getFileNameWithFallback(null, 'content://com.android.providers.media.documents/document/12345', 'spreadsheet')).toEqual('spreadsheet');
+        });
+
+        it('should return the default file name when both the name and the URI are empty', () => {
+            expect(getFileNameWithFallback('', '', 'spreadsheet')).toEqual('spreadsheet');
         });
     });
 
@@ -118,54 +149,69 @@ describe('FileUtils', () => {
     });
 
     describe('canvasFallback', () => {
-        const mockCreateImageBitmap = jest.fn();
-        const mockCanvas = {
+        const mockCloseImageBitmap = jest.fn<ReturnType<ImageBitmap['close']>, Parameters<ImageBitmap['close']>>();
+        const mockCtx = createMock<CanvasRenderingContext2D>({
+            drawImage: jest.fn(),
+        });
+        let mockCanvas2DContext: CanvasRenderingContext2D | null;
+        function mockCanvasGetContext(contextId: '2d', options?: CanvasRenderingContext2DSettings): CanvasRenderingContext2D | null;
+        function mockCanvasGetContext(contextId: 'bitmaprenderer', options?: ImageBitmapRenderingContextSettings): ImageBitmapRenderingContext | null;
+        function mockCanvasGetContext(contextId: 'webgl', options?: WebGLContextAttributes): WebGLRenderingContext | null;
+        function mockCanvasGetContext(contextId: 'webgl2', options?: WebGLContextAttributes): WebGL2RenderingContext | null;
+        function mockCanvasGetContext(contextId: Parameters<HTMLCanvasElement['getContext']>[0]): GPUCanvasContext | null;
+        function mockCanvasGetContext(contextId: string, options?: unknown): RenderingContext | null;
+        function mockCanvasGetContext(contextId: string): RenderingContext | GPUCanvasContext | null {
+            return contextId === '2d' ? mockCanvas2DContext : null;
+        }
+        const productionGetContext: HTMLCanvasElement['getContext'] = mockCanvasGetContext;
+        const mockCanvas = createMock<HTMLCanvasElement>({
             width: 0,
             height: 0,
-            getContext: jest.fn(),
-            toBlob: jest.fn(),
-        };
-        const mockCtx = {
-            drawImage: jest.fn(),
-        };
-        const mockCreateElement = jest.fn();
-        const mockURL = {
-            createObjectURL: jest.fn(() => 'blob:mock-url'),
-        };
+            getContext: productionGetContext,
+            toBlob: () => undefined,
+        });
+        let mockImageBitmap: ImageBitmap;
+        let mockToBlob: jest.SpiedFunction<HTMLCanvasElement['toBlob']>;
+        let mockCreateElement: jest.SpiedFunction<Document['createElement']>;
+        let restoreCreateObjectURL: () => void;
+        const mockCreateImageBitmap: typeof globalThis.createImageBitmap = () => Promise.resolve(mockImageBitmap);
 
         beforeEach(() => {
             jest.clearAllMocks();
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            (global as any).createImageBitmap = mockCreateImageBitmap;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            (global as any).document = {
-                createElement: mockCreateElement,
-            };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            (global as any).URL = mockURL;
-
-            mockCreateElement.mockReturnValue(mockCanvas);
-            mockCanvas.getContext.mockReturnValue(mockCtx);
-            mockCreateImageBitmap.mockResolvedValue({
+            mockCanvas.width = 0;
+            mockCanvas.height = 0;
+            mockCanvas2DContext = mockCtx;
+            mockImageBitmap = createMock<ImageBitmap>({
                 width: 1000,
                 height: 800,
-                close: jest.fn(),
+                close: mockCloseImageBitmap,
             });
+
+            if (typeof globalThis.URL.createObjectURL === 'function') {
+                const mockCreateObjectURL = jest.spyOn(globalThis.URL, 'createObjectURL').mockReturnValue('blob:mock-url');
+                restoreCreateObjectURL = () => mockCreateObjectURL.mockRestore();
+            } else {
+                globalThis.URL.createObjectURL = jest.fn<ReturnType<typeof URL.createObjectURL>, Parameters<typeof URL.createObjectURL>>().mockReturnValue('blob:mock-url');
+                restoreCreateObjectURL = () => {
+                    Reflect.deleteProperty(globalThis.URL, 'createObjectURL');
+                };
+            }
+
+            mockToBlob = jest.spyOn(mockCanvas, 'toBlob');
+            mockCreateElement = jest.spyOn(document, 'createElement').mockReturnValue(mockCanvas);
+            globalThis.createImageBitmap = mockCreateImageBitmap;
         });
 
         afterEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            delete (global as any).createImageBitmap;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            delete (global as any).document;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            delete (global as any).URL;
+            mockToBlob.mockRestore();
+            mockCreateElement.mockRestore();
+            restoreCreateObjectURL();
+            Reflect.deleteProperty(globalThis, 'createImageBitmap');
         });
 
         it('should reject when createImageBitmap is undefined', async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            delete (global as any).createImageBitmap;
+            Reflect.deleteProperty(globalThis, 'createImageBitmap');
 
             const blob = new Blob(['test'], {type: 'image/heic'});
 
@@ -175,24 +221,22 @@ describe('FileUtils', () => {
         it('should successfully convert HEIC to JPEG', async () => {
             const blob = new Blob(['test'], {type: 'image/heic'});
             const mockBlob = new Blob(['converted'], {type: 'image/jpeg'});
-            mockCanvas.toBlob.mockImplementation((callback: (blob: Blob | null) => void) => callback(mockBlob));
+            mockToBlob.mockImplementation((callback: (blob: Blob | null) => void) => callback(mockBlob));
 
             const result = await canvasFallback(blob, 'expense.heic');
 
             expect(result).toBeInstanceOf(File);
             expect(result.type).toBe(CONST.IMAGE_FILE_FORMAT.JPEG);
             expect(result.name).toBe('expense.jpg');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            expect((result as any).uri).toBe('blob:mock-url');
+            expect(result).toHaveProperty('uri', 'blob:mock-url');
         });
 
         it('should scale down large images', async () => {
             const blob = new Blob(['test'], {type: 'image/heic'});
-            const mockImageBitmap = {width: 8192, height: 4000, close: jest.fn()};
-            mockCreateImageBitmap.mockResolvedValue(mockImageBitmap);
+            mockImageBitmap = createMock<ImageBitmap>({width: 8192, height: 4000, close: mockCloseImageBitmap});
 
             const mockBlob = new Blob(['converted'], {type: 'image/jpeg'});
-            mockCanvas.toBlob.mockImplementation((callback: (blob: Blob | null) => void) => callback(mockBlob));
+            mockToBlob.mockImplementation((callback: (blob: Blob | null) => void) => callback(mockBlob));
 
             await canvasFallback(blob, 'test.heic');
 
@@ -202,14 +246,14 @@ describe('FileUtils', () => {
 
         it('should reject when canvas context is null', async () => {
             const blob = new Blob(['test'], {type: 'image/heic'});
-            mockCanvas.getContext.mockReturnValue(null);
+            mockCanvas2DContext = null;
 
             await expect(canvasFallback(blob, 'test.heic')).rejects.toThrow('Could not get canvas context');
         });
 
         it('should reject when toBlob returns null', async () => {
             const blob = new Blob(['test'], {type: 'image/heic'});
-            mockCanvas.toBlob.mockImplementation((callback: (blob: Blob | null) => void) => callback(null));
+            mockToBlob.mockImplementation((callback: (blob: Blob | null) => void) => callback(null));
 
             await expect(canvasFallback(blob, 'test.heic')).rejects.toThrow('Canvas conversion failed - returned null blob');
         });
@@ -222,7 +266,7 @@ describe('FileUtils', () => {
 
         describe('with file:// URLs (native)', () => {
             it('should return scaled dimensions for normal-sized images', async () => {
-                (ImageSize.getSize as jest.Mock).mockResolvedValue({width: 4000, height: 3000});
+                jest.mocked(ImageSize.getSize).mockResolvedValue({width: 4000, height: 3000});
 
                 const file = {uri: 'file://test.jpg', name: 'test.jpg', type: 'image/jpeg'};
                 const result = await getImageDimensionsAfterResize(file);
@@ -233,7 +277,7 @@ describe('FileUtils', () => {
 
             it('should throw IMAGE_DIMENSIONS_TOO_LARGE error when image exceeds maximum pixel count', async () => {
                 // 10000 x 6000 = 60 million pixels, which exceeds MAX_IMAGE_PIXEL_COUNT (50 million)
-                (ImageSize.getSize as jest.Mock).mockResolvedValue({width: 10000, height: 6000});
+                jest.mocked(ImageSize.getSize).mockResolvedValue({width: 10000, height: 6000});
 
                 const file = {uri: 'file://large-image.jpg', name: 'large-image.jpg', type: 'image/jpeg'};
 
@@ -242,7 +286,7 @@ describe('FileUtils', () => {
 
             it('should not throw for images at exactly the maximum pixel count', async () => {
                 // Exactly 50 million pixels (e.g., 10000 x 5000)
-                (ImageSize.getSize as jest.Mock).mockResolvedValue({width: 10000, height: 5000});
+                jest.mocked(ImageSize.getSize).mockResolvedValue({width: 10000, height: 5000});
 
                 const file = {uri: 'file://max-size.jpg', name: 'max-size.jpg', type: 'image/jpeg'};
 
@@ -409,7 +453,7 @@ describe('FileUtils', () => {
                 // Create an invalid/unrecognized blob (not JPEG or PNG)
                 const invalidBlob = new Blob([new Uint8Array([0x00, 0x00, 0x00, 0x00])], {type: 'image/webp'});
                 mockFetchWithBlob(invalidBlob);
-                (ImageSize.getSize as jest.Mock).mockResolvedValue({width: 800, height: 600});
+                jest.mocked(ImageSize.getSize).mockResolvedValue({width: 800, height: 600});
 
                 const file = {uri: 'blob:http://localhost/unknown-format', name: 'test.webp', type: 'image/webp'};
                 const result = await getImageDimensionsAfterResize(file);
@@ -480,6 +524,61 @@ describe('FileUtils', () => {
         /* eslint-enable no-bitwise */
     });
 
+    describe('createFile', () => {
+        afterEach(() => {
+            jest.mocked(getPlatform).mockReset();
+        });
+
+        it('should keep the uri when cloning a File on web', () => {
+            // Given a web File that carries a blob uri for previewing
+            jest.mocked(getPlatform).mockReturnValue(CONST.PLATFORM.WEB);
+            const file = new File(['content'], 'image.jpeg', {type: 'image/jpeg'});
+            file.uri = 'blob:http://localhost/image';
+
+            const clonedFile = createFile(file);
+
+            // Then the clone keeps the uri, because attachment previews read it to display the image
+            expect(clonedFile).toBeInstanceOf(File);
+            expect(clonedFile).not.toBe(file);
+            expect(clonedFile.uri).toBe('blob:http://localhost/image');
+            expect(clonedFile.name).toBe('image.jpeg');
+            expect(clonedFile.type).toBe('image/jpeg');
+        });
+
+        it('should keep the uri when cloning a file on native', () => {
+            jest.mocked(getPlatform).mockReturnValue(CONST.PLATFORM.IOS);
+            const file = new File(['content'], 'image.jpeg', {type: 'image/jpeg'});
+            file.uri = 'file://image.jpeg';
+
+            const clonedFile = createFile(file);
+
+            expect(clonedFile).toEqual({uri: 'file://image.jpeg', name: 'image.jpeg', type: 'image/jpeg'});
+        });
+    });
+
+    describe('resizeImageIfNeeded', () => {
+        afterEach(() => {
+            jest.mocked(getPlatform).mockReset();
+            jest.mocked(getImageManipulator).mockReset();
+        });
+
+        it('should return a resized File with a uri on web when the image is larger than the max size', async () => {
+            // Given an image on web that is larger than the max attachment size, and an image manipulator that returns a File with a blob uri
+            jest.mocked(getPlatform).mockReturnValue(CONST.PLATFORM.WEB);
+            jest.mocked(ImageSize.getSize).mockResolvedValue({width: 6000, height: 4000});
+            const resizedFile = new File(['resized'], 'large.jpeg', {type: 'image/jpeg'});
+            resizedFile.uri = 'blob:http://localhost/resized';
+            jest.mocked(getImageManipulator).mockResolvedValue(resizedFile);
+            const file = {uri: 'file://large.jpg', name: 'large.jpg', type: 'image/jpeg', size: CONST.API_ATTACHMENT_VALIDATIONS.MAX_SIZE + 1};
+
+            const result = await resizeImageIfNeeded(file);
+
+            // Then the result keeps the resized blob uri, so the attachment preview can load it instead of spinning forever
+            expect(result).toBeInstanceOf(File);
+            expect(result.uri).toBe('blob:http://localhost/resized');
+        });
+    });
+
     describe('isHighResolutionImage', () => {
         it('should return false when resolution is null', () => {
             expect(isHighResolutionImage(null)).toBe(false);
@@ -499,13 +598,33 @@ describe('FileUtils', () => {
     });
 
     describe('getFileValidationErrorText', () => {
-        const mockTranslate = ((path: string) => path) as LocaleContextProps['translate'];
+        const mockTranslate: LocaleContextProps['translate'] = (path, ...parameters) => {
+            parameters.some(() => false);
+            return path;
+        };
 
         it('should return correct error text for IMAGE_DIMENSIONS_TOO_LARGE', () => {
             const result = getFileValidationErrorText(mockTranslate, {error: CONST.FILE_VALIDATION_ERRORS.IMAGE_DIMENSIONS_TOO_LARGE});
 
             expect(result.title).toBe('attachmentPicker.attachmentError');
             expect(result.reason).toBe('attachmentPicker.imageDimensionsTooLarge');
+        });
+
+        it('should return the folder-specific error text for a single folder', () => {
+            const result = getFileValidationErrorText(mockTranslate, {error: CONST.FILE_VALIDATION_ERRORS.FOLDER_NOT_ALLOWED});
+
+            expect(result.title).toBe('attachmentPicker.attachmentError');
+            expect(result.reason).toBe('attachmentPicker.folderNotAllowedMessage');
+        });
+
+        it('should return the folder-specific error text when multiple items are selected', () => {
+            const result = getFileValidationErrorText(mockTranslate, {
+                error: CONST.FILE_VALIDATION_ERRORS.FOLDER_NOT_ALLOWED,
+                isValidatingMultipleFiles: true,
+            });
+
+            expect(result.title).toBe('attachmentPicker.someFilesCantBeUploaded');
+            expect(result.reason).toBe('attachmentPicker.folderNotAllowedMessage');
         });
 
         it('should return empty strings for null validation error', () => {

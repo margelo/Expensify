@@ -1,9 +1,10 @@
-import Button from '@components/ButtonComposed';
+import Button from '@components/Button';
 
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
 import usePaginatedReportActions from '@hooks/usePaginatedReportActions';
 
+import {getAccountingIntegrationDisplayName} from '@libs/AccountingUtils';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import {getValidConnectedIntegration} from '@libs/PolicyUtils';
 import {getFilteredReportActionsForReportView} from '@libs/ReportActionsUtils';
@@ -19,13 +20,16 @@ import React from 'react';
 type ExportPrimaryActionProps = {
     reportID: string | undefined;
     onExportModalOpen: () => void;
+    /** Disables the Export button, e.g. while expenses are selected */
+    isDisabled?: boolean;
 };
 
-function ExportPrimaryAction({reportID, onExportModalOpen}: ExportPrimaryActionProps) {
+function ExportPrimaryAction({reportID, onExportModalOpen, isDisabled}: ExportPrimaryActionProps) {
     const {translate} = useLocalize();
     const [moneyRequestReport] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${reportID}`);
     const [policy] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY}${getNonEmptyStringOnyxID(moneyRequestReport?.policyID)}`);
     const connectedIntegration = getValidConnectedIntegration(policy);
+    const connectionNameFriendly = connectedIntegration ? getAccountingIntegrationDisplayName(policy, connectedIntegration, translate) : undefined;
 
     const {reportActions: unfilteredReportActions} = usePaginatedReportActions(moneyRequestReport?.reportID);
     const reportActions = getFilteredReportActionsForReportView(unfilteredReportActions);
@@ -34,6 +38,7 @@ function ExportPrimaryAction({reportID, onExportModalOpen}: ExportPrimaryActionP
     return (
         <Button
             variant={CONST.BUTTON_VARIANT.SUCCESS}
+            isDisabled={isDisabled}
             onPress={() => {
                 if (!connectedIntegration || !moneyRequestReport) {
                     return;
@@ -42,7 +47,7 @@ function ExportPrimaryAction({reportID, onExportModalOpen}: ExportPrimaryActionP
                     onExportModalOpen();
                     return;
                 }
-                exportToIntegration(moneyRequestReport.reportID, connectedIntegration);
+                exportToIntegration(moneyRequestReport.reportID, connectedIntegration, policy);
             }}
         >
             <Button.Text>
@@ -50,6 +55,7 @@ function ExportPrimaryAction({reportID, onExportModalOpen}: ExportPrimaryActionP
                     // connectedIntegration is guaranteed non-null when EXPORT_TO_ACCOUNTING is the primary action
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                     connectionName: connectedIntegration!,
+                    connectionNameFriendly,
                 })}
             </Button.Text>
         </Button>
