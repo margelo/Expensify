@@ -1,5 +1,12 @@
 # `react-native` patches
 
+### [react-native+0.86.0+044+add-local-pgo-build-switch.patch](react-native+0.86.0+044+add-local-pgo-build-switch.patch)
+
+- Reason: Adds an opt-in local LLVM PGO mode to the React Native Android runtime and Hermes source builds. The mode is disabled by default and is used only by the local PGO tooling.
+- Upstream PR/issue: 🛑
+- E/App issue: 🛑
+- PR Introducing Patch: 🛑
+
 ### [react-native+0.86.0+001+initial.patch](react-native+0.86.0+001+initial.patch)
 
 - Reason: Fixes keyboard flickering issue when opening/closing modals. When an input is blurred and a modal is opened, the `rootView` becomes the `firstResponder`, causing the system to retain an incorrect keyboard state. This leads to keyboard flickering when the modal is closed. The patch adds code to resign the `rootView`'s `firstResponder` status before presenting the modal to prevent this issue.
@@ -390,3 +397,9 @@
 - E/App issue: https://github.com/Expensify/App/issues/103369
 - PR introducing patch: https://github.com/Expensify/App/pull/103447
 - 0.86.0 migration note: the adopted release containing `3f553d7` is not enough to drop this patch. `0.87.0` still throws here and already has `checkNotNull(parentView)` right before this check. `0.88` soft-fails a non-`ViewGroup` parent but keeps that `checkNotNull`, so a null `parentView` (the placeholder `ViewState` from [react-native#58526](https://github.com/react/react-native/issues/58526)) still crashes. On the 0.88 upgrade, reduce it to soft-failing the `checkNotNull` only. Drop it once upstream handles a null `parentView` in `removeViewAt`.
+
+### [react-native+0.86.0+048+pgo-emulator-abi.patch](react-native+0.86.0+048+pgo-emulator-abi.patch)
+
+- Reason: Select the profiling runtime for the configured Android ABI so the PGO build switches also work on x86_64 emulators. ARM64 device builds retain the aarch64 runtime.
+- E/App issue: https://github.com/Expensify/App/issues/98008
+- PR introducing patch: https://github.com/margelo/Expensify/pull/34

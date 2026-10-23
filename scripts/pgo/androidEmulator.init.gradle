@@ -1,0 +1,28 @@
+// Disposable verification builds use the bundled workload and the Android debug key.
+gradle.beforeProject { application ->
+    application.plugins.withId('com.facebook.react') {
+        application.extensions.getByName('react').entryFile.set(
+            application.file('../../src/PgoVerificationApp.tsx')
+        )
+    }
+    application.plugins.withId('com.android.application') {
+        application.extensions.getByName('androidComponents').finalizeDsl { android ->
+            def release = android.buildTypes.getByName('release')
+            release.signingConfig = android.signingConfigs.getByName('debug')
+            // R8 needs more heap than a hosted runner can spare beside the emulator, and it only shrinks Java and Kotlin code, which native PGO does not change.
+            release.minifyEnabled = false
+        }
+    }
+    application.tasks.configureEach { task ->
+        if (task.name.toLowerCase().startsWith('fullstory')) {
+            task.enabled = false
+        }
+    }
+    // Without a Gradle cache, the app sends every Maven Central lookup through repo.grails.org, which answers hosted runners with HTTP 429.
+    // Grails only mirrors Maven Central for this build, so ask Maven Central directly.
+    application.repositories.withType(MavenArtifactRepository).configureEach { repository ->
+        if (repository.url.host == 'repo.grails.org') {
+            repository.url = 'https://repo.maven.apache.org/maven2/'
+        }
+    }
+}
