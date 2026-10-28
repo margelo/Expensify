@@ -32,6 +32,7 @@ export default function setupMockLegendList() {
                     onEndReached,
                     onEndReachedThreshold = 0.5,
                     onLoad,
+                    onReady,
                     onScroll,
                     onStartReached,
                     onStartReachedThreshold = 0.5,
@@ -42,17 +43,22 @@ export default function setupMockLegendList() {
                 ref,
             ) => {
                 const onLoadRef = ReactActual.useRef(onLoad);
+                const onReadyRef = ReactActual.useRef(onReady);
                 const listMetricsRef = ReactActual.useRef<{contentLength: number; scroll: number; scrollLength: number} | undefined>(undefined);
                 const reachedEdgesRef = ReactActual.useRef({end: false, start: false});
                 onLoadRef.current = onLoad;
+                onReadyRef.current = onReady;
 
                 ReactActual.useEffect(() => {
                     onLoadRef.current?.({elapsedTimeInMs: 0});
+                    onReadyRef.current?.();
                 }, []);
 
                 ReactActual.useImperativeHandle(
                     ref,
                     () => ({
+                        anchorVisibleContent: jest.fn(),
+                        cancelScroll: jest.fn(),
                         clearCaches: jest.fn(),
                         flashScrollIndicators: jest.fn(),
                         getAnimatableRef: () => null,
@@ -62,6 +68,7 @@ export default function setupMockLegendList() {
                         getState: () => ({
                             data: data ?? [],
                             elementAtIndex: () => undefined,
+                            positionByKey: () => undefined,
                             endBuffered: (data?.length ?? 0) - 1,
                             startBuffered: 0,
                             ...listMetricsRef.current,
@@ -72,6 +79,7 @@ export default function setupMockLegendList() {
                         scrollToEnd: jest.fn(() => Promise.resolve()),
                         scrollToIndex: jest.fn(() => Promise.resolve()),
                         scrollToItem: jest.fn(() => Promise.resolve()),
+                        scrollToKey: jest.fn(() => Promise.resolve()),
                         scrollToOffset: jest.fn(() => Promise.resolve()),
                         setItemSize: jest.fn(),
                         setScrollProcessingEnabled: jest.fn(),

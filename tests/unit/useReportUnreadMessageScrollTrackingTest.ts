@@ -227,6 +227,32 @@ describe('useReportUnreadMessageScrollTracking', () => {
             expect(onUnreadActionVisibleLocalMockFn).toHaveBeenCalledTimes(1);
             expect(result.current.isFloatingMessageCounterVisible).toBe(false);
         });
+
+        it('tracks an unread marker in a chronological list', () => {
+            const offsetRef = {current: 0};
+            const {result} = renderHook(() =>
+                useReportUnreadMessageScrollTracking({
+                    reportID,
+                    currentVerticalScrollingOffsetRef: offsetRef,
+                    onUnreadActionVisible: onUnreadActionVisibleMockFn,
+                    unreadMarkerReportActionIndex: 5,
+                    isInverted: false,
+                    onTrackScrolling: onTrackScrollingMockFn,
+                    hasNewerActions: false,
+                }),
+            );
+
+            act(() => {
+                result.current.onViewableItemsChanged({viewableItems: [{index: 3, key: 'reportActions_3', isViewable: true, item: {}}], changed: []});
+            });
+            expect(result.current.isFloatingMessageCounterVisible).toBe(true);
+
+            act(() => {
+                result.current.onViewableItemsChanged({viewableItems: [{index: 5, key: 'reportActions_5', isViewable: true, item: {}}], changed: []});
+            });
+            expect(result.current.isFloatingMessageCounterVisible).toBe(false);
+            expect(onUnreadActionVisibleMockFn).toHaveBeenCalled();
+        });
     });
 
     describe('latest messages pill in a read chat', () => {
@@ -374,6 +400,28 @@ describe('useReportUnreadMessageScrollTracking', () => {
             expect(result.current.isActionBadgeAboveViewport).toBe(true);
         });
 
+        it('returns isActionBadgeAboveViewport as true for a lower index above a chronological viewport', () => {
+            const offsetRef = {current: 0};
+            const {result} = renderHook(() =>
+                useReportUnreadMessageScrollTracking({
+                    reportID,
+                    currentVerticalScrollingOffsetRef: offsetRef,
+                    onUnreadActionVisible: onUnreadActionVisibleMockFn,
+                    onTrackScrolling: onTrackScrollingMockFn,
+                    hasNewerActions: false,
+                    unreadMarkerReportActionIndex: -1,
+                    isInverted: false,
+                    actionBadgeTargetIndex: 1,
+                }),
+            );
+
+            act(() => {
+                result.current.onViewableItemsChanged({viewableItems: [{index: 3, key: 'reportActions_3', isViewable: true, item: {}}], changed: []});
+            });
+
+            expect(result.current.isActionBadgeAboveViewport).toBe(true);
+        });
+
         it('returns isActionBadgeAboveViewport as false when action badge target is visible in viewport', () => {
             const offsetRef = {current: 0};
             const {result} = renderHook(() =>
@@ -495,8 +543,8 @@ describe('useReportUnreadMessageScrollTracking', () => {
             expect(result.current.isActionBadgeAboveViewport).toBe(true);
         });
 
-        it('keeps the action badge hidden when the live range shows the target despite stale viewable items', () => {
-            // Given a live range that contains the target, as after a sent message shifts it from index 2 to 3
+        it.each([true, false])('keeps the action badge hidden despite stale viewable items when inverted is %s', (isInverted) => {
+            // Given a live range containing the target in either list order.
             const offsetRef = {current: 0};
             const {result} = renderHook(() =>
                 useReportUnreadMessageScrollTracking({
@@ -506,19 +554,19 @@ describe('useReportUnreadMessageScrollTracking', () => {
                     onTrackScrolling: onTrackScrollingMockFn,
                     hasNewerActions: false,
                     unreadMarkerReportActionIndex: -1,
-                    isInverted: true,
+                    isInverted,
                     actionBadgeTargetIndex: 3,
-                    getVisibleIndexRange: () => ({startIndex: 0, endIndex: 3}),
+                    getVisibleIndexRange: () => ({startIndex: 2, endIndex: 4}),
                 }),
             );
 
-            // When FlashList reports a snapshot taken before the shift, which ends at index 2
+            // When the stale snapshot places the target above the viewport.
             act(() => {
                 result.current.onViewableItemsChanged({
                     viewableItems: [
-                        {index: 0, key: 'reportActions_0', isViewable: true, item: {}},
-                        {index: 1, key: 'reportActions_1', isViewable: true, item: {}},
-                        {index: 2, key: 'reportActions_2', isViewable: true, item: {}},
+                        {index: isInverted ? 0 : 4, key: 'first', isViewable: true, item: {}},
+                        {index: isInverted ? 1 : 5, key: 'middle', isViewable: true, item: {}},
+                        {index: isInverted ? 2 : 6, key: 'last', isViewable: true, item: {}},
                     ],
                     changed: [],
                 });
