@@ -1,6 +1,7 @@
 import CollapsibleHeaderOnKeyboard from '@components/CollapsibleHeaderOnKeyboard';
 import OfflineWithFeedback from '@components/OfflineWithFeedback';
 import ScreenWrapper from '@components/ScreenWrapper';
+import ScreenWrapperOfflineIndicators from '@components/ScreenWrapper/ScreenWrapperOfflineIndicators';
 import WideRHPOverlayWrapper from '@components/WideRHPOverlayWrapper';
 
 import {useCurrentReportIDState} from '@hooks/useCurrentReportID';
@@ -12,9 +13,10 @@ import useThemeStyles from '@hooks/useThemeStyles';
 import useViewportOffsetTop from '@hooks/useViewportOffsetTop';
 
 import {removeFailedReport} from '@libs/actions/Report';
+import canUseKeyboardGestureArea from '@libs/canUseKeyboardGestureArea';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import Navigation from '@libs/Navigation/Navigation';
-import {isMoneyRequestReport} from '@libs/ReportUtils';
+import {isInvoiceReport, isMoneyRequestReport} from '@libs/ReportUtils';
 
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
@@ -29,14 +31,13 @@ import {KeyboardGestureArea, KeyboardStickyView} from 'react-native-keyboard-con
 
 import type ReportScreenNavigationProps from './types';
 
-import AccountManagerBanner from './AccountManagerBanner';
 import {ActionListContextProvider} from './ActionListContext';
 import {AgentZeroStatusProvider} from './AgentZeroStatusContext';
 import {ConciergeDraftProvider} from './ConciergeDraftContext';
 import DeleteTransactionNavigateBackHandler from './DeleteTransactionNavigateBackHandler';
 import useDeferNonEssentials from './hooks/useDeferNonEssentials';
-import useFlushDeferredWriteOnFocus from './hooks/useFlushDeferredWriteOnFocus';
 import LinkedActionNotFoundGuard from './LinkedActionNotFoundGuard';
+import OneTransactionThreadRedirectHandler from './OneTransactionThreadRedirectHandler';
 import ReactionListWrapper from './ReactionListWrapper';
 import ReportActionCompose from './report/ReportActionCompose/ReportActionCompose';
 import {ReportActionEditMessageContextProvider, ReportScreenEditMessageProviderWithTransactionThread} from './report/ReportActionEditMessageContext';
@@ -78,16 +79,17 @@ function ReportScreenEditMessageProvider({reportID, children}: ReportScreenEditM
 function ReportScreen({route, navigation, shouldDeferReportActions = false}: ReportScreenProps) {
     const styles = useThemeStyles();
     const reportIDFromRoute = getNonEmptyStringOnyxID(route.params?.reportID);
-    const {isInNarrowPaneModal} = useResponsiveLayout();
+    // Wide panes already render the composer's inline offline indicator.
+    // eslint-disable-next-line rulesdir/prefer-shouldUseNarrowLayout-instead-of-isSmallScreenWidth
+    const {isInNarrowPaneModal, isSmallScreenWidth} = useResponsiveLayout();
     const {currentReportID: currentReportIDValue} = useCurrentReportIDState();
     const viewportOffsetTop = useViewportOffsetTop();
     const isTopMostReportId = currentReportIDValue === reportIDFromRoute;
     const isKeyboardInteractionEnabled = isTopMostReportId || isInNarrowPaneModal;
-    const screenWrapperStyle: ViewStyle[] = [styles.appContent, styles.flex1, {marginTop: viewportOffsetTop}];
-    const safeAreaPaddings = useSafeAreaPaddings();
+    const safeAreaPaddings = useSafeAreaPaddings(true);
     const [composerHeight, setComposerHeight] = useState<number>(CONST.CHAT_FOOTER_MIN_HEIGHT);
-    const keyboardGestureAreaOffset = composerHeight - safeAreaPaddings.paddingBottom;
     const [isComposerFullSize = false] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_IS_COMPOSER_FULL_SIZE}${reportIDFromRoute}`);
+    const screenWrapperStyle: ViewStyle[] = [styles.appContent, styles.flex1, {marginTop: viewportOffsetTop}];
 
     const shouldDeferNonEssentials = useDeferNonEssentials(reportIDFromRoute);
 
@@ -97,15 +99,15 @@ function ReportScreen({route, navigation, shouldDeferReportActions = false}: Rep
         CONST.TELEMETRY.SUBMIT_TO_DESTINATION_VISIBLE_TRIGGER.FOCUS,
     );
 
-    useFlushDeferredWriteOnFocus(CONST.DEFERRED_LAYOUT_WRITE_KEYS.DISMISS_MODAL);
-
     const [reportPendingActionAndErrors] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${reportIDFromRoute}`, {
         selector: (r) => ({
             reportPendingAction: r?.pendingFields?.createReport ?? r?.pendingFields?.reportName,
             reportErrors: r?.errorFields?.createReport,
+            isKeyboardAwareList: canUseKeyboardGestureArea() && !!r && !isMoneyRequestReport(r) && !isInvoiceReport(r),
         }),
     });
-    const {reportPendingAction, reportErrors} = reportPendingActionAndErrors ?? {};
+    const {reportPendingAction, reportErrors, isKeyboardAwareList} = reportPendingActionAndErrors ?? {};
+    const isKeyboardAwareLayout = !!isKeyboardAwareList && !isComposerFullSize;
 
     const dismissReportCreationError = () => {
         Navigation.goBack(undefined, {
@@ -116,55 +118,55 @@ function ReportScreen({route, navigation, shouldDeferReportActions = false}: Rep
     useClearReportActionDraftsOnReportChange(reportIDFromRoute);
 
     return (
-        <KeyboardGestureArea
-            style={styles.flex1}
-            offset={keyboardGestureAreaOffset}
-            interpolator="ios"
-            textInputNativeID={CONST.COMPOSER.NATIVE_ID}
-            enableSwipeToDismiss={isKeyboardInteractionEnabled && !isComposerFullSize}
-        >
-            <ReportScreenEditMessageProvider reportID={reportIDFromRoute}>
-                <WideRHPOverlayWrapper shouldWrap={route.name === SCREENS.RIGHT_MODAL.SEARCH_REPORT}>
-                    <ActionListContextProvider>
-                        <ReactionListWrapper>
-                            <ScreenWrapper
-                                navigation={navigation}
-                                style={screenWrapperStyle}
-                                shouldEnableKeyboardAvoidingView={false}
-                                shouldShowOfflineIndicator={false}
-                                shouldShowOfflineIndicatorInWideScreen={false}
-                                enableEdgeToEdgeBottomSafeAreaPadding
-                                testID={`report-screen-${reportIDFromRoute}`}
-                            >
-                                {!shouldDeferNonEssentials && (
-                                    <>
-                                        <DeleteTransactionNavigateBackHandler />
-                                        <ReportRouteParamHandler />
-                                        <ReportFetchHandler />
-                                        <ReportNavigateAwayHandler />
-                                    </>
-                                )}
-                                <ReportNotFoundGuard>
-                                    <LinkedActionNotFoundGuard>
-                                        <ReportDragAndDropProvider>
-                                            {!shouldDeferNonEssentials && <ReportLifecycleHandler reportID={reportIDFromRoute} />}
-                                            <CollapsibleHeaderOnKeyboard>
-                                                <ReportHeader />
-                                                {!shouldDeferNonEssentials && <AccountManagerBanner reportID={reportIDFromRoute} />}
-                                            </CollapsibleHeaderOnKeyboard>
-                                            <OfflineWithFeedback
-                                                pendingAction={reportPendingAction}
-                                                errors={reportErrors}
-                                                onClose={dismissReportCreationError}
-                                                needsOffscreenAlphaCompositing
-                                                style={styles.flex1}
-                                                contentContainerStyle={styles.flex1}
-                                                errorRowStyles={[styles.ph5, styles.mv2]}
-                                            >
-                                                <View style={[styles.flex1, styles.flexRow]}>
-                                                    {!shouldDeferNonEssentials && <WideRHPReceiptPanel />}
-                                                    <AgentZeroStatusProvider reportID={reportIDFromRoute}>
-                                                        <ConciergeDraftProvider reportID={reportIDFromRoute}>
+        <ReportScreenEditMessageProvider reportID={reportIDFromRoute}>
+            <WideRHPOverlayWrapper shouldWrap={route.name === SCREENS.RIGHT_MODAL.SEARCH_REPORT}>
+                <ActionListContextProvider>
+                    <ReactionListWrapper>
+                        <ScreenWrapper
+                            navigation={navigation}
+                            style={screenWrapperStyle}
+                            shouldEnableKeyboardAvoidingView={isKeyboardInteractionEnabled && !isKeyboardAwareLayout}
+                            shouldShowOfflineIndicator={isKeyboardAwareLayout ? false : undefined}
+                            shouldShowOfflineIndicatorInWideScreen={isKeyboardAwareLayout ? false : undefined}
+                            enableEdgeToEdgeBottomSafeAreaPadding={isKeyboardAwareLayout ? true : undefined}
+                            testID={`report-screen-${reportIDFromRoute}`}
+                        >
+                            {!shouldDeferNonEssentials && (
+                                <>
+                                    <DeleteTransactionNavigateBackHandler />
+                                    <ReportRouteParamHandler />
+                                    <OneTransactionThreadRedirectHandler />
+                                    <ReportFetchHandler />
+                                    <ReportNavigateAwayHandler />
+                                </>
+                            )}
+                            <ReportNotFoundGuard>
+                                <LinkedActionNotFoundGuard>
+                                    <ReportDragAndDropProvider>
+                                        {!shouldDeferNonEssentials && <ReportLifecycleHandler reportID={reportIDFromRoute} />}
+                                        <CollapsibleHeaderOnKeyboard>
+                                            <ReportHeader />
+                                        </CollapsibleHeaderOnKeyboard>
+                                        <OfflineWithFeedback
+                                            pendingAction={reportPendingAction}
+                                            errors={reportErrors}
+                                            onClose={dismissReportCreationError}
+                                            needsOffscreenAlphaCompositing
+                                            style={styles.flex1}
+                                            contentContainerStyle={styles.flex1}
+                                            errorRowStyles={[styles.ph5, styles.mv2]}
+                                        >
+                                            <View style={[styles.flex1, styles.flexRow]}>
+                                                {!shouldDeferNonEssentials && <WideRHPReceiptPanel />}
+                                                <AgentZeroStatusProvider reportID={reportIDFromRoute}>
+                                                    <ConciergeDraftProvider reportID={reportIDFromRoute}>
+                                                        <KeyboardGestureArea
+                                                            style={styles.flex1}
+                                                            offset={isKeyboardAwareLayout && isKeyboardInteractionEnabled ? Math.max(0, composerHeight - safeAreaPaddings.paddingBottom) : 0}
+                                                            interpolator="ios"
+                                                            textInputNativeID={isKeyboardInteractionEnabled ? CONST.COMPOSER.NATIVE_ID : undefined}
+                                                            enableSwipeToDismiss={isKeyboardAwareLayout && isKeyboardInteractionEnabled}
+                                                        >
                                                             <View
                                                                 style={[styles.flex1, styles.justifyContentEnd, styles.overflowHidden]}
                                                                 testID="report-actions-view-wrapper"
@@ -174,27 +176,37 @@ function ReportScreen({route, navigation, shouldDeferReportActions = false}: Rep
                                                                     shouldDefer={shouldDeferReportActions}
                                                                 />
                                                                 <KeyboardStickyView
-                                                                    enabled={isKeyboardInteractionEnabled}
+                                                                    enabled={isKeyboardAwareLayout && isKeyboardInteractionEnabled}
+                                                                    style={[isComposerFullSize && styles.h100, isKeyboardAwareLayout && safeAreaPaddings.safeAreaPaddingBottomStyle]}
                                                                     onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
-                                                                    offset={{closed: 0, opened: safeAreaPaddings.paddingBottom}}
+                                                                    offset={{
+                                                                        closed: 0,
+                                                                        opened: safeAreaPaddings.paddingBottom,
+                                                                    }}
                                                                 >
                                                                     {shouldDeferNonEssentials ? <ReportActionCompose.Placeholder /> : <ReportFooter />}
+                                                                    {isKeyboardAwareLayout && isSmallScreenWidth && (
+                                                                        <ScreenWrapperOfflineIndicators
+                                                                            shouldMobileOfflineIndicatorStickToBottom={false}
+                                                                            addBottomSafeAreaPadding={false}
+                                                                        />
+                                                                    )}
                                                                 </KeyboardStickyView>
                                                             </View>
-                                                        </ConciergeDraftProvider>
-                                                    </AgentZeroStatusProvider>
-                                                </View>
-                                            </OfflineWithFeedback>
-                                            <PortalHost name="suggestions" />
-                                        </ReportDragAndDropProvider>
-                                    </LinkedActionNotFoundGuard>
-                                </ReportNotFoundGuard>
-                            </ScreenWrapper>
-                        </ReactionListWrapper>
-                    </ActionListContextProvider>
-                </WideRHPOverlayWrapper>
-            </ReportScreenEditMessageProvider>
-        </KeyboardGestureArea>
+                                                        </KeyboardGestureArea>
+                                                    </ConciergeDraftProvider>
+                                                </AgentZeroStatusProvider>
+                                            </View>
+                                        </OfflineWithFeedback>
+                                        <PortalHost name="suggestions" />
+                                    </ReportDragAndDropProvider>
+                                </LinkedActionNotFoundGuard>
+                            </ReportNotFoundGuard>
+                        </ScreenWrapper>
+                    </ReactionListWrapper>
+                </ActionListContextProvider>
+            </WideRHPOverlayWrapper>
+        </ReportScreenEditMessageProvider>
     );
 }
 

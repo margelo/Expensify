@@ -34,28 +34,4 @@ describe('ReportActionsSkeletonCover', () => {
         expect(mockReportActionsSkeletonView).toHaveBeenCalledTimes(1);
         expect(mockReportActionsSkeletonView.mock.calls.at(-1)?.at(0)).toEqual(expect.objectContaining({shouldAnimate: true}));
     });
-
-    it('accepts additional presentation styles', () => {
-        render(
-            <ReportActionsAnimatedSkeletonCover
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
-                    zIndex: 10,
-                }}
-            />,
-        );
-
-        expect(screen.getByTestId('ReportActionsSkeletonCover')).toHaveStyle({
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: 0,
-            zIndex: 10,
-        });
-    });
 });

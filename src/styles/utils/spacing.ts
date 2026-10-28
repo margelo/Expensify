@@ -767,8 +767,8 @@ export default {
         paddingTop: 40,
     },
 
-    pt16: {
-        paddingTop: 64,
+    pt18: {
+        paddingTop: 72,
     },
 
     pt20: {
@@ -873,6 +873,14 @@ export default {
 
     gap8: {
         gap: 32,
+    },
+
+    gap96: {
+        gap: 96,
+    },
+
+    rowGap1: {
+        rowGap: 4,
     },
 
     rowGap4: {

@@ -1,6 +1,9 @@
+import Reanimated from 'react-native-reanimated';
+
 import {Actions, ActionSheetAwareScrollViewProvider, useActionSheetAwareScrollViewActions, useActionSheetAwareScrollViewState} from './ActionSheetAwareScrollViewContext';
 
-const ActionSheetAwareScrollView = undefined;
 const renderScrollComponent = undefined;
 
-export {ActionSheetAwareScrollView, renderScrollComponent, ActionSheetAwareScrollViewProvider, Actions, useActionSheetAwareScrollViewState, useActionSheetAwareScrollViewActions};
+export {renderScrollComponent, ActionSheetAwareScrollViewProvider, Actions, useActionSheetAwareScrollViewState, useActionSheetAwareScrollViewActions};
+
+export default Reanimated.ScrollView;

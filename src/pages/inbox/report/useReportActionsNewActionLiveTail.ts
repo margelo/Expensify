@@ -3,7 +3,8 @@ import useIsInSidePanel from '@hooks/useIsInSidePanel';
 import type useReportScrollManager from '@hooks/useReportScrollManager';
 
 import type {OpenReportActionParams} from '@libs/actions/Report';
-import {openReport, pruneReportActionPagesToNewestWindow, subscribeToNewActionEvent} from '@libs/actions/Report';
+import {openReport, pruneReportActionPagesToNewestWindow} from '@libs/actions/Report';
+import {subscribeToNewActionEvent} from '@libs/actions/Report/reportActionSubscribers';
 import isReportTopmostSplitNavigator from '@libs/Navigation/helpers/isReportTopmostSplitNavigator';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackNavigationProp} from '@libs/Navigation/PlatformStackNavigation/types';
@@ -12,14 +13,13 @@ import TransitionTracker from '@libs/Navigation/TransitionTracker';
 import type {ReportsSplitNavigatorParamList} from '@navigation/types';
 
 import CONST from '@src/CONST';
-import ROUTES from '@src/ROUTES';
 import type SCREENS from '@src/SCREENS';
 import type * as OnyxTypes from '@src/types/onyx';
 
 import type {OnyxEntry} from 'react-native-onyx';
 
 import {useNavigation} from '@react-navigation/native';
-import {useCallback, useEffect, useEffectEvent, useRef, useState} from 'react';
+import {useEffect, useEffectEvent, useRef, useState} from 'react';
 
 // In the component we are subscribing to the arrival of new actions.
 // As there is the possibility that there are multiple instances of a ReportScreen
@@ -36,7 +36,6 @@ type RAMOnlyReportLoadingState = OnyxEntry<{
 type UseReportActionsNewActionLiveTailParams = {
     reportID: string;
     introSelected: OpenReportActionParams['introSelected'];
-    betas: OpenReportActionParams['betas'];
     conciergeChat: OpenReportActionParams['conciergeChat'];
     isSelfTourViewed: OpenReportActionParams['isSelfTourViewed'];
     hasCompletedGuidedSetupFlow: OpenReportActionParams['hasCompletedGuidedSetupFlow'];
@@ -56,9 +55,11 @@ type UseReportActionsNewActionLiveTailParams = {
     treatAsNoPaginationAnchor: boolean;
     prevIsLoadingInitialReportActions: boolean | undefined;
     reportLoadingState: RAMOnlyReportLoadingState;
+    fullPolicySnapshot?: OpenReportActionParams['fullPolicySnapshot'];
 };
 
 type LiveTailJumpStage = 'idle' | 'open_report' | 'await_scroll' | 'await_prune';
+const PENDING_SENT_ACTION_TIMEOUT_MS = 5000;
 
 /**
  * Owns subscribe-to-new-action scrolling, live-tail jump (openReport → scroll → prune), and the
@@ -69,7 +70,6 @@ function useReportActionsNewActionLiveTail({
     conciergeChat,
     reportID,
     introSelected,
-    betas,
     isSelfTourViewed,
     hasCompletedGuidedSetupFlow,
     isOffline,
@@ -87,14 +87,42 @@ function useReportActionsNewActionLiveTail({
     treatAsNoPaginationAnchor,
     prevIsLoadingInitialReportActions,
     reportLoadingState,
+    fullPolicySnapshot,
 }: UseReportActionsNewActionLiveTailParams) {
     const navigation = useNavigation<PlatformStackNavigationProp<ReportsSplitNavigatorParamList, typeof SCREENS.REPORT>>();
     const isInSidePanel = useIsInSidePanel();
     const {accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
     const liveTailJumpRef = useRef<{stage: LiveTailJumpStage}>({stage: 'idle'});
     const [isScrollToBottomEnabled, setIsScrollToBottomEnabled] = useState(false);
+    const [pendingScrollActionID, setPendingScrollActionID] = useState<string>();
+    const [scrollRequestReportID, setScrollRequestReportID] = useState(reportID);
+    if (scrollRequestReportID !== reportID) {
+        setScrollRequestReportID(reportID);
+        setIsScrollToBottomEnabled(false);
+        setPendingScrollActionID(undefined);
+    }
 
-    const scrollToBottomForCurrentUserAction = useEffectEvent((isFromCurrentUser: boolean, action?: OnyxTypes.ReportAction) => {
+    const setShouldScrollToBottom = (enabled: boolean) => {
+        setIsScrollToBottomEnabled(enabled);
+        if (!enabled) {
+            setPendingScrollActionID(undefined);
+        }
+    };
+
+    const isPendingScrollActionRendered = !!pendingScrollActionID && renderedVisibleReportActions.some((item) => item.reportActionID === pendingScrollActionID);
+
+    useEffect(() => {
+        if (!pendingScrollActionID) {
+            return;
+        }
+
+        // The optimistic row normally arrives immediately. A filtered or failed row must not
+        // scroll the reader much later when pagination or reconnecting makes it visible.
+        const timeout = setTimeout(() => setPendingScrollActionID(undefined), PENDING_SENT_ACTION_TIMEOUT_MS);
+        return () => clearTimeout(timeout);
+    }, [pendingScrollActionID]);
+
+    const scrollToBottomForCurrentUserAction = useEffectEvent<Parameters<typeof subscribeToNewActionEvent>[1]>((isFromCurrentUser, action, source = 'local') => {
         TransitionTracker.runAfterTransitions({
             callback: () => {
                 // If a new comment is added and it's from the current user scroll to the bottom otherwise leave the user positioned where
@@ -102,18 +130,18 @@ function useReportActionsNewActionLiveTail({
                 if (!isFromCurrentUser || (!isReportTopmostSplitNavigator() && !Navigation.getReportRHPActiveRoute())) {
                     return;
                 }
-                if (!hasNewestReportAction && !isFromCurrentUser) {
-                    if (Navigation.getReportRHPActiveRoute()) {
-                        return;
-                    }
-                    Navigation.setNavigationActionToMicrotaskQueue(() => {
-                        Navigation.navigate(ROUTES.REPORT_WITH_ID.getRoute(reportID));
-                    });
+                // A realtime echo can represent an edit or deletion, whereas local payload-less
+                // notifications from money requests still need the usual live-tail behavior.
+                if (!action && source === 'realtime') {
                     return;
                 }
 
+                // An unread marker only needs openReport when the newest actions are not loaded yet. When they are, they are
+                // just off-screen, so scroll to them directly instead of waiting on a network round trip.
                 const shouldJumpToLiveTail =
-                    !isOffline && action?.actionName !== CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW && (hasNewerActions || !!linkedReportActionID || unreadMarkerReportActionID);
+                    !isOffline &&
+                    action?.actionName !== CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW &&
+                    (hasNewerActions || !!linkedReportActionID || (!!unreadMarkerReportActionID && !hasNewestReportAction));
 
                 if (shouldJumpToLiveTail) {
                     if (liveTailJumpRef.current.stage === 'idle') {
@@ -122,16 +150,22 @@ function useReportActionsNewActionLiveTail({
                             reportID,
                             introSelected,
                             conciergeChat,
-                            betas,
                             hasReportActions: true,
                             currentUserAccountID,
                             isSelfTourViewed,
                             hasCompletedGuidedSetupFlow,
+                            fullPolicySnapshot,
                         });
                     }
                     return;
                 }
 
+                // Release the old pagination anchor so offline sends appear without waiting for openReport.
+                if (isOffline && linkedReportActionID && action?.actionName !== CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW) {
+                    liveTailJumpRef.current = {stage: 'await_prune'};
+                    setTreatAsNoPaginationAnchor(true);
+                    navigation.setParams({reportActionID: ''});
+                }
                 const index = renderedVisibleReportActions.findIndex((item) => item.reportActionID === action?.reportActionID);
                 if (action?.actionName === CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW) {
                     setIsFloatingMessageCounterVisible(false);
@@ -147,20 +181,24 @@ function useReportActionsNewActionLiveTail({
                     }
                 } else {
                     setIsFloatingMessageCounterVisible(false);
-                    setIsScrollToBottomEnabled(true);
+                    if (action?.reportActionID) {
+                        setPendingScrollActionID(action.reportActionID);
+                    } else {
+                        setShouldScrollToBottom(true);
+                    }
                 }
             },
         });
     });
 
-    const completeLiveTailPruneAfterScrollToBottom = useCallback(() => {
+    const completeLiveTailPruneAfterScrollToBottom = () => {
         if (liveTailJumpRef.current.stage !== 'await_prune') {
             return;
         }
         pruneReportActionPagesToNewestWindow(reportID, sortedAllReportActionsForPagination, reportActionPages);
         setTreatAsNoPaginationAnchor(false);
         liveTailJumpRef.current = {stage: 'idle'};
-    }, [reportID, sortedAllReportActionsForPagination, reportActionPages, setTreatAsNoPaginationAnchor]);
+    };
 
     useEffect(() => {
         liveTailJumpRef.current = {stage: 'idle'};
@@ -205,9 +243,9 @@ function useReportActionsNewActionLiveTail({
         setIsFloatingMessageCounterVisible(false);
         // Defer so this effect does not synchronously chain a second render from setState (eslint react-hooks/set-state-in-effect).
         queueMicrotask(() => {
-            setIsScrollToBottomEnabled(true);
+            setShouldScrollToBottom(true);
         });
-    }, [hasNewestReportAction, treatAsNoPaginationAnchor, setIsFloatingMessageCounterVisible]);
+    }, [hasNewestReportAction, treatAsNoPaginationAnchor, setIsFloatingMessageCounterVisible, setShouldScrollToBottom]);
 
     useEffect(() => {
         // Why are we doing this, when in the cleanup of the useEffect we are already calling the unsubscribe function?
@@ -237,8 +275,8 @@ function useReportActionsNewActionLiveTail({
     }, [reportID]);
 
     return {
-        isScrollToBottomEnabled,
-        setIsScrollToBottomEnabled,
+        isScrollToBottomEnabled: isScrollToBottomEnabled || isPendingScrollActionRendered,
+        setIsScrollToBottomEnabled: setShouldScrollToBottom,
         completeLiveTailPruneAfterScrollToBottom,
     };
 }

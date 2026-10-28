@@ -44,6 +44,11 @@ const LIST_CONTENT_SIZE = {
     height: 600,
 };
 const LIST_END_OFFSET = LIST_CONTENT_SIZE.height - LIST_SIZE.height;
+const PAGINATED_LIST_CONTENT_SIZE = {
+    ...LIST_CONTENT_SIZE,
+    height: LIST_CONTENT_SIZE.height * 2,
+};
+const PAGINATED_LIST_END_OFFSET = PAGINATED_LIST_CONTENT_SIZE.height - LIST_SIZE.height;
 const TEN_MINUTES_AGO = subMinutes(new Date(), 10);
 
 const REPORT_ID = '1';
@@ -59,14 +64,14 @@ function getReportScreen(reportID = REPORT_ID) {
     return screen.getByTestId(`report-screen-${reportID}`);
 }
 
-function scrollToOffset(offset: number) {
+function scrollToOffset(offset: number, contentSize = LIST_CONTENT_SIZE) {
     const hintText = TestHelper.translateLocal('sidebarScreen.listOfChatMessages');
     fireEvent.scroll(within(getReportScreen()).getByLabelText(hintText), {
         nativeEvent: {
             contentOffset: {
                 y: offset,
             },
-            contentSize: LIST_CONTENT_SIZE,
+            contentSize,
             layoutMeasurement: LIST_SIZE,
         },
     });
@@ -95,7 +100,8 @@ function triggerListLayout(reportID?: string) {
         },
     });
 
-    fireEvent(within(report).getByTestId('report-actions-list'), 'onContentSizeChange', LIST_CONTENT_SIZE.width, LIST_CONTENT_SIZE.height);
+    const reportActionsList = within(report).getByTestId('report-actions-list');
+    fireEvent(reportActionsList, 'onContentSizeChange', LIST_CONTENT_SIZE.width, LIST_CONTENT_SIZE.height);
 }
 
 function getReportActions(reportID?: string) {
@@ -246,7 +252,7 @@ async function signInAndGetApp(): Promise<void> {
     await waitForBatchedUpdatesWithAct();
 
     // Start listening for pusher events after navigation settles.
-    subscribeToUserEvents(USER_A_ACCOUNT_ID, USER_A_EMAIL, () => {}, undefined);
+    subscribeToUserEvents(USER_A_ACCOUNT_ID, USER_A_EMAIL, () => {}, TestHelper.formatPhoneNumber, undefined);
     await waitForBatchedUpdates();
 
     await Promise.all([
@@ -354,7 +360,7 @@ describe('Pagination', () => {
         TestHelper.expectAPICommandToHaveBeenCalled('GetOlderActions', 0);
         TestHelper.expectAPICommandToHaveBeenCalled('GetNewerActions', 0);
 
-        // Scrolling here should trigger a new network request.
+        // When the visible viewport reaches the oldest loaded message, request the older page.
         scrollToOffset(0);
         await waitForBatchedUpdatesWithAct();
 
@@ -403,9 +409,9 @@ describe('Pagination', () => {
         TestHelper.expectAPICommandToHaveBeenCalledWith('GetNewerActions', 0, {reportID: REPORT_ID, reportActionID: '5'});
 
         // Simulate the maintainVisibleContentPosition scroll adjustment, so it is now possible to scroll down more.
-        scrollToOffset(0);
+        scrollToOffset(0, PAGINATED_LIST_CONTENT_SIZE);
         await waitForBatchedUpdatesWithAct();
-        scrollToOffset(LIST_END_OFFSET);
+        scrollToOffset(PAGINATED_LIST_END_OFFSET, PAGINATED_LIST_CONTENT_SIZE);
         await waitForBatchedUpdatesWithAct();
 
         // We now have 10 messages. 5 from the initial OpenReport and 5 from the GetNewerActions call.
@@ -415,9 +421,9 @@ describe('Pagination', () => {
         TestHelper.expectAPICommandToHaveBeenCalled('GetOlderActions', 0);
         TestHelper.expectAPICommandToHaveBeenCalled('GetNewerActions', 2);
 
-        scrollToOffset(0);
+        scrollToOffset(0, PAGINATED_LIST_CONTENT_SIZE);
         await waitForBatchedUpdatesWithAct();
-        scrollToOffset(LIST_END_OFFSET);
+        scrollToOffset(PAGINATED_LIST_END_OFFSET, PAGINATED_LIST_CONTENT_SIZE);
         await waitForBatchedUpdatesWithAct();
 
         // When there are no newer actions, we don't want to trigger GetNewerActions again.

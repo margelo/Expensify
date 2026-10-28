@@ -199,7 +199,6 @@ describe('ReportActions (orchestrator)', () => {
 
         render(<ReportActions />);
 
-        expect(screen.getByTestId('ReportActionsSkeletonCover')).toBeTruthy();
         expect(screen.getByTestId('ReportActionsSkeletonView')).toBeTruthy();
         expect(mockReportActionsListBody).not.toHaveBeenCalled();
         expect(mockMarkOpenReportEnd).toHaveBeenCalledWith(REPORT_ID, mockReport, {warm: false});

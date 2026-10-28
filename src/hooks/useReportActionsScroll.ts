@@ -21,21 +21,28 @@ import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
 import type SCREENS from '@src/SCREENS';
 import type * as OnyxTypes from '@src/types/onyx';
+import type {ViewableItemsChanged} from '@src/types/utils/ReactNativeCompat';
 
-import type {NativeScrollEvent, NativeSyntheticEvent, ViewToken} from 'react-native';
+import type {NativeScrollEvent, NativeSyntheticEvent} from 'react-native';
 import type {OnyxEntry} from 'react-native-onyx';
 
 import {useRoute} from '@react-navigation/native';
 import {guidedSetupAndTourStatusSelector} from '@selectors/Onboarding';
+import {fullPolicySnapshotLastModifiedSelector} from '@selectors/Policy';
 import {useEffect, useEffectEvent, useState} from 'react';
 
 import useCurrentUserPersonalDetails from './useCurrentUserPersonalDetails';
+import useLinkedReportActionScroll from './useLinkedReportActionScroll';
 import useNetworkWithOfflineStatus from './useNetworkWithOfflineStatus';
 import useOnyx from './useOnyx';
 import usePrevious from './usePrevious';
 import useReportScrollManager from './useReportScrollManager';
+import useScrollToEndOnNewMessageReceived from './useScrollToEndOnNewMessageReceived';
 
 type UseReportActionsScrollParams = {
+    /** Identifies the mounted list, including linked-message and hydration remounts. */
+    listID: string;
+
     /** The Concierge chat report */
     conciergeChat: OnyxEntry<OnyxTypes.Report>;
 
@@ -56,6 +63,9 @@ type UseReportActionsScrollParams = {
     /** Actions actually rendered by the list in chronological order (may include a synthetic draft), used for scroll positioning */
     renderedVisibleReportActions: OnyxTypes.ReportAction[];
 
+    /** Maps hidden canonical actions to the summary row used by the list. */
+    reportActionIDToDisplayIndex?: ReadonlyMap<string, number>;
+
     /** Extracts the list key for an action; used to locate the initial scroll target */
     keyExtractor: (item: OnyxTypes.ReportAction) => string;
 
@@ -69,7 +79,7 @@ type UseReportActionsScrollParams = {
     /** The report action ID the unread marker is anchored to, if any */
     unreadMarkerReportActionID: string | null;
 
-    /** The index of the unread report action in the sorted visible actions list (-1 if none) */
+    /** The index of the unread report action in the rendered actions list (-1 if none) */
     unreadMarkerReportActionIndex: number;
 
     /** Whether the report has newer actions to load */
@@ -92,7 +102,7 @@ type UseReportActionsScrollResult = {
     trackVerticalScrolling: (event: NativeSyntheticEvent<NativeScrollEvent> | undefined) => void;
 
     /** Viewability handler that drives the floating counter and badge visibility */
-    onViewableItemsChanged: (info: {viewableItems: ViewToken[]; changed: ViewToken[]}) => void;
+    onViewableItemsChanged: ViewableItemsChanged;
 
     /** Whether the floating "new messages" counter is visible */
     isFloatingMessageCounterVisible: boolean;
@@ -100,7 +110,7 @@ type UseReportActionsScrollResult = {
     /** Whether the action badge target is above the viewport */
     isActionBadgeAboveViewport: boolean;
 
-    /** Scrolls to the newest action and marks the report as read */
+    /** Scrolls to the unread marker when available, otherwise to the newest action, and marks the report as read when appropriate */
     scrollToBottomAndMarkReportAsRead: () => void;
 
     scrollToActionBadgeTarget: () => void;
@@ -116,9 +126,16 @@ type UseReportActionsScrollResult = {
 
     /** onLoad handler that enables pill tracking after initial positioning settles */
     onLoad: () => void;
+
+    onItemSizeChanged: (info: {index: number; size: number; previous: number}) => void;
+
+    trackLinkedMessageScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+
+    stopLinkedMessagePositioning: () => void;
 };
 
 function useReportActionsScroll({
+    listID,
     conciergeChat,
     reportID,
     report,
@@ -126,6 +143,7 @@ function useReportActionsScroll({
     parentReportAction,
     sortedVisibleReportActions,
     renderedVisibleReportActions,
+    reportActionIDToDisplayIndex,
     keyExtractor,
     markNewestActionAsRead,
     completeSkippedMarkAsRead,
@@ -138,17 +156,21 @@ function useReportActionsScroll({
     setTreatAsNoPaginationAnchor,
 }: UseReportActionsScrollParams): UseReportActionsScrollResult {
     const reportScrollManager = useReportScrollManager();
-    const {scrollOffsetRef} = useActionListContext();
+    const {scrollOffsetRef, getListRef} = useActionListContext();
     const route = useRoute<PlatformStackRouteProp<ReportsSplitNavigatorParamList, typeof SCREENS.REPORT>>();
     const linkedReportActionID = route?.params?.reportActionID;
     const backTo = route?.params?.backTo;
     const {isOffline} = useNetworkWithOfflineStatus();
     const [introSelected] = useOnyx(ONYXKEYS.NVP_INTRO_SELECTED);
-    const [betas] = useOnyx(ONYXKEYS.BETAS);
     const [guidedSetupAndTourStatus] = useOnyx(ONYXKEYS.NVP_ONBOARDING, {selector: guidedSetupAndTourStatusSelector});
     const {accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
     const [reportLoadingState] = useOnyx(`${ONYXKEYS.COLLECTION.RAM_ONLY_REPORT_LOADING_STATE}${reportID}`);
     const [reportActionPages] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS_PAGES}${getNonEmptyStringOnyxID(reportID)}`);
+    const [fullPolicySnapshotLastModified] = useOnyx(`${ONYXKEYS.COLLECTION.RAM_ONLY_FULL_POLICY_SNAPSHOT}${getNonEmptyStringOnyxID(report?.policyID)}`, {
+        selector: fullPolicySnapshotLastModifiedSelector,
+    });
+    const fullPolicySnapshot = report?.policyID && fullPolicySnapshotLastModified ? {policyID: report.policyID, lastModified: fullPolicySnapshotLastModified} : undefined;
+    const [isComposerFullSize = false] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_IS_COMPOSER_FULL_SIZE}${reportID}`);
     const prevIsLoadingInitialReportActions = usePrevious(reportLoadingState?.isLoadingInitialReportActions);
 
     const [actionIdToHighlight, setActionIdToHighlight] = useState('');
@@ -184,27 +206,56 @@ function useReportActionsScroll({
     const shouldFocusToTopOnMount = shouldBeAlignedToTop && !initialScrollKey && !shouldScrollToLatestOnOpen;
     const [shouldDisablePillTracking, setShouldDisablePillTracking] = useState(!!initialScrollKey);
 
-    const {isFloatingMessageCounterVisible, setIsFloatingMessageCounterVisible, isActionBadgeAboveViewport, trackVerticalScrolling, onViewableItemsChanged, updatePillVisibility} =
-        useReportUnreadMessageScrollTracking({
-            reportID,
-            currentVerticalScrollingOffsetRef: scrollOffsetRef,
-            onUnreadActionVisible: completeSkippedMarkAsRead,
-            hasNewerActions,
-            unreadMarkerReportActionIndex,
-            isInverted: false,
-            shouldDisablePillTracking,
-            onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-            },
-            actionBadgeTargetIndex,
-            shouldBeAlignedToTop,
-        });
+    const {
+        isFloatingMessageCounterVisible,
+        setIsFloatingMessageCounterVisible,
+        isActionBadgeAboveViewport,
+        setIsActionBadgeAboveViewport,
+        trackVerticalScrolling,
+        onViewableItemsChanged,
+        updatePillVisibility,
+    } = useReportUnreadMessageScrollTracking({
+        reportID,
+        currentVerticalScrollingOffsetRef: scrollOffsetRef,
+        onUnreadActionVisible: completeSkippedMarkAsRead,
+        hasNewerActions,
+        unreadMarkerReportActionIndex,
+        isInverted: false,
+        // The list is hidden behind the expanded composer, so scrolling it must not bring the Latest messages pill back
+        shouldDisablePillTracking: shouldDisablePillTracking || isComposerFullSize,
+        onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+        },
+        actionBadgeTargetIndex,
+        getVisibleIndexRange: () => {
+            const list = getListRef()?.current;
+            // getLayout is the one accessor that does not throw before FlashList has laid out
+            if (!list || (list.getLayout && !list.getLayout(0))) {
+                return undefined;
+            }
+            const range = list.computeVisibleIndices?.();
+            // An empty viewport comes back as {-1, -2}, which would read as "target above", so fall back to the reported items
+            return range && range.startIndex >= 0 ? range : undefined;
+        },
+        shouldBeAlignedToTop,
+    });
+
+    const prevIsComposerFullSize = usePrevious(isComposerFullSize);
+    // Scroll events skipped pill tracking while expanded, so sync the Latest messages pill with the current offset
+    const syncPillAfterComposerCollapse = useEffectEvent(() => {
+        if (!prevIsComposerFullSize || isComposerFullSize || shouldDisablePillTracking) {
+            return;
+        }
+        updatePillVisibility();
+    });
+    useEffect(() => {
+        syncPillAfterComposerCollapse();
+    }, [isComposerFullSize]);
 
     const {isScrollToBottomEnabled, setIsScrollToBottomEnabled, completeLiveTailPruneAfterScrollToBottom} = useReportActionsNewActionLiveTail({
         conciergeChat,
         reportID,
         introSelected,
-        betas,
         isSelfTourViewed: guidedSetupAndTourStatus?.isSelfTourViewed,
         hasCompletedGuidedSetupFlow: guidedSetupAndTourStatus?.hasCompletedGuidedSetupFlow,
         isOffline,
@@ -222,11 +273,11 @@ function useReportActionsScroll({
         treatAsNoPaginationAnchor,
         prevIsLoadingInitialReportActions,
         reportLoadingState,
+        fullPolicySnapshot,
     });
 
     // Consume an explicit live-tail request after the data render, not on an unrelated future
     // viewport layout (for example, opening the keyboard after the user has scrolled away).
-    // Incoming messages and streaming draft growth are followed by LegendList itself.
     useEffect(() => {
         if (!isScrollToBottomEnabled) {
             return;
@@ -293,8 +344,63 @@ function useReportActionsScroll({
         return () => handle?.cancel();
     }, [lastAction]);
 
+    // Decide where the list should be positioned on mount.
+    // 1. If we're opening a linked or unread message, find that action in the chronological list.
+    // 2. Otherwise, aligned-to-top reports start at the first action.
+    const targetIndex = initialScrollKey
+        ? (reportActionIDToDisplayIndex?.get(initialScrollKey) ?? renderedVisibleReportActions.findIndex((item) => keyExtractor(item) === initialScrollKey))
+        : -1;
+    let initialScrollIndex: number | undefined;
+    let initialScrollIndexParams: {viewPosition?: number; viewOffset?: number} | undefined;
+    if (targetIndex >= 0) {
+        initialScrollIndex = targetIndex;
+        // A linked final action can be taller than the viewport, so show its highlighted end.
+        // Unread actions still start at the New marker. Omit viewOffset for bottom alignment so
+        // LegendList includes the footer (for example, Concierge's thinking indicator).
+        initialScrollIndexParams =
+            initialScrollKey === linkedReportActionID && targetIndex === renderedVisibleReportActions.length - 1
+                ? {viewPosition: 1}
+                : {viewPosition: 0, viewOffset: CONST.REPORT.ACTIONS.LINKED_MESSAGE_OFFSET};
+    } else if (shouldFocusToTopOnMount) {
+        initialScrollIndex = 0;
+    }
+
+    const {
+        onReady,
+        onItemSizeChanged,
+        onScroll: trackLinkedMessageScroll,
+        stopPositioning: stopLinkedMessagePositioning,
+    } = useLinkedReportActionScroll({
+        listID,
+        linkedReportActionID: initialScrollKey === linkedReportActionID ? linkedReportActionID : undefined,
+        targetIndex,
+        isLastAction: targetIndex === renderedVisibleReportActions.length - 1,
+    });
+
+    useScrollToEndOnNewMessageReceived({
+        scrollOffsetRef,
+        lastActionID: lastAction?.reportActionID,
+        visibleActionsLength: sortedVisibleReportActions.length,
+        hasNewestReportAction,
+        setIsFloatingMessageCounterVisible,
+        scrollToEnd: () => {
+            stopLinkedMessagePositioning();
+            reportScrollManager.scrollToBottom();
+        },
+        resetKey: `${reportID}:${linkedReportActionID}`,
+    });
+
     const scrollToBottomAndMarkReportAsRead = () => {
+        stopLinkedMessagePositioning();
         setIsFloatingMessageCounterVisible(false);
+
+        if (unreadMarkerReportActionIndex >= 0) {
+            reportScrollManager.scrollToIndex(unreadMarkerReportActionIndex);
+            if (hasNewestReportAction) {
+                markNewestActionAsRead();
+            }
+            return;
+        }
 
         if (!hasNewestReportAction) {
             if (!Navigation.getReportRHPActiveRoute()) {
@@ -304,11 +410,11 @@ function useReportActionsScroll({
                 reportID,
                 introSelected,
                 conciergeChat,
-                betas,
                 hasReportActions: true,
                 currentUserAccountID,
                 isSelfTourViewed: guidedSetupAndTourStatus?.isSelfTourViewed,
                 hasCompletedGuidedSetupFlow: guidedSetupAndTourStatus?.hasCompletedGuidedSetupFlow,
+                fullPolicySnapshot,
             });
             reportScrollManager.scrollToBottom();
             return;
@@ -321,34 +427,26 @@ function useReportActionsScroll({
         if (actionBadgeTargetIndex < 0) {
             return;
         }
-        reportScrollManager.scrollToIndex(actionBadgeTargetIndex, {viewPosition: 0, viewOffset: CONST.REPORT.ACTIONS.LINKED_MESSAGE_OFFSET});
+        stopLinkedMessagePositioning();
+        // The expanded composer covers the list, so the target never becomes viewable to hide the pill
+        if (isComposerFullSize) {
+            setIsActionBadgeAboveViewport(false);
+            setIsFloatingMessageCounterVisible(false);
+        }
+        // `animated` is explicit because native defaults to an instant jump, which would teleport the list and lose the user's place.
+        reportScrollManager.scrollToIndex(actionBadgeTargetIndex, {animated: true, viewPosition: 0, viewOffset: CONST.REPORT.ACTIONS.LINKED_MESSAGE_OFFSET});
     };
 
-    // Data is ready when LegendList finishes its first render.
     const onLoad = () => {
+        onReady();
         if (!shouldDisablePillTracking) {
             return;
         }
-
-        // Wait one frame so the initial positioning can settle, then disable it.
         requestAnimationFrame(() => {
             setShouldDisablePillTracking(false);
             updatePillVisibility();
         });
     };
-
-    // Decide where the list should be positioned on mount.
-    // 1. If we're opening a linked or unread message, find that action in the chronological list.
-    // 2. Otherwise, aligned-to-top reports start at the first action.
-    const targetIndex = initialScrollKey ? renderedVisibleReportActions.findIndex((item) => keyExtractor(item) === initialScrollKey) : -1;
-    let initialScrollIndex: number | undefined;
-    let initialScrollIndexParams: {viewPosition?: number; viewOffset?: number} | undefined;
-    if (targetIndex >= 0) {
-        initialScrollIndex = targetIndex;
-        initialScrollIndexParams = {viewPosition: 0, viewOffset: CONST.REPORT.ACTIONS.LINKED_MESSAGE_OFFSET};
-    } else if (shouldFocusToTopOnMount) {
-        initialScrollIndex = 0;
-    }
 
     return {
         trackVerticalScrolling,
@@ -361,6 +459,9 @@ function useReportActionsScroll({
         initialScrollIndex,
         initialScrollIndexParams,
         onLoad,
+        onItemSizeChanged,
+        trackLinkedMessageScroll,
+        stopLinkedMessagePositioning,
     };
 }
 

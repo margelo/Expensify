@@ -115,12 +115,22 @@ function navigateToSidebar(): Promise<void> {
     return waitForBatchedUpdates();
 }
 
-async function navigateToSidebarOptionWithoutAct(index: number): Promise<void> {
+async function navigateToSidebarOptionWithoutViewportLayout(index: number): Promise<void> {
     const optionRow = screen.queryAllByAccessibilityHint(TestHelper.getNavigateToChatHintRegex()).at(index);
     if (!optionRow) {
         return;
     }
     fireEvent(optionRow, 'press');
+    await waitForBatchedUpdates();
+}
+
+async function navigateToSidebarOptionWithoutAct(index: number): Promise<void> {
+    await navigateToSidebarOptionWithoutViewportLayout(index);
+
+    // React Native reports the viewport layout automatically, but View.onLayout does not fire in Jest.
+    fireEvent(screen.getByTestId('report-actions-list-viewport'), 'onLayout', {
+        nativeEvent: {layout: {x: 0, y: 0, width: 300, height: 500}},
+    });
     await waitForBatchedUpdates();
 }
 
@@ -207,7 +217,7 @@ async function signInAndGetAppWithUnreadChat(): Promise<void> {
     renderAppOnce();
     await waitForBatchedUpdatesWithAct();
 
-    subscribeToUserEvents(USER_A_ACCOUNT_ID, USER_A_EMAIL, () => {}, undefined);
+    subscribeToUserEvents(USER_A_ACCOUNT_ID, USER_A_EMAIL, () => {}, TestHelper.formatPhoneNumber, undefined);
 
     await waitForBatchedUpdates();
 
@@ -708,7 +718,18 @@ describe('Unread Indicators', () => {
 
                     const report = await OnyxUtils.get(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`);
                     if (lastReportAction) {
-                        deleteReportComment(report, lastReportAction, undefined, undefined, [], undefined, undefined, '');
+                        deleteReportComment({
+                            report,
+                            reportAction: lastReportAction,
+                            originalReportActions: undefined,
+                            reportActions: undefined,
+                            ancestors: [],
+                            isReportArchived: undefined,
+                            isOriginalReportArchived: undefined,
+                            currentEmail: '',
+                            isOffline: false,
+                            currentUserAccountID: 1,
+                        });
                     }
                     return waitForBatchedUpdates();
                 })
@@ -764,7 +785,18 @@ describe('Unread Indicators', () => {
 
             await waitForBatchedUpdates();
 
-            deleteReportComment(report, firstNewReportAction, undefined, undefined, [], undefined, undefined, '');
+            deleteReportComment({
+                report,
+                reportAction: firstNewReportAction,
+                originalReportActions: undefined,
+                reportActions: undefined,
+                ancestors: [],
+                isReportArchived: undefined,
+                isOriginalReportArchived: undefined,
+                currentEmail: '',
+                isOffline: false,
+                currentUserAccountID: 1,
+            });
 
             await waitForBatchedUpdates();
         }
@@ -837,7 +869,8 @@ describe('Unread Indicators', () => {
             },
         });
 
-        await navigateToSidebarOptionWithoutAct(0);
+        // The self-DM cannot open its report while offline, so it never mounts a report-actions viewport.
+        await navigateToSidebarOptionWithoutViewportLayout(0);
 
         const fakeTransaction = {
             ...createRandomTransaction(1),
@@ -875,7 +908,6 @@ describe('Unread Indicators', () => {
             introSelected: undefined,
             quickAction: undefined,
             recentWaypoints,
-            betas: [CONST.BETAS.ALL],
             isSelfTourViewed: false,
             currentUserLocalCurrency: undefined,
             delegateAccountID: undefined,

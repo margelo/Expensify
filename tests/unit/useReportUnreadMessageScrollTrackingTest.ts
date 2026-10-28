@@ -95,7 +95,7 @@ describe('useReportUnreadMessageScrollTracking', () => {
 
             // When
             act(() => {
-                offsetRef.current = CONST.REPORT.ACTIONS.LATEST_MESSAGES_PILL_SCROLL_OFFSET_THRESHOLD + 100;
+                offsetRef.current = CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD + 100;
                 result.current.trackVerticalScrolling(emptyScrollEventMock);
             });
             rerender({});
@@ -154,7 +154,7 @@ describe('useReportUnreadMessageScrollTracking', () => {
 
             // When
             act(() => {
-                offsetRef.current = CONST.REPORT.ACTIONS.LATEST_MESSAGES_PILL_SCROLL_OFFSET_THRESHOLD - 100;
+                offsetRef.current = CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD - 100;
                 result.current.trackVerticalScrolling(emptyScrollEventMock);
             });
 
@@ -252,6 +252,99 @@ describe('useReportUnreadMessageScrollTracking', () => {
             });
             expect(result.current.isFloatingMessageCounterVisible).toBe(false);
             expect(onUnreadActionVisibleMockFn).toHaveBeenCalled();
+        });
+    });
+
+    describe('latest messages pill in a read chat', () => {
+        const onTrackScrollingMockFn = jest.fn();
+        const shortHistoryScrollOffset = 600;
+
+        const renderReadChatHook = (offsetRef: {current: number}, unreadMarkerReportActionIndex = -1) =>
+            renderHook(() =>
+                useReportUnreadMessageScrollTracking({
+                    reportID,
+                    currentVerticalScrollingOffsetRef: offsetRef,
+                    onUnreadActionVisible: onUnreadActionVisibleMockFn,
+                    onTrackScrolling: onTrackScrollingMockFn,
+                    hasNewerActions: false,
+                    unreadMarkerReportActionIndex,
+                    isInverted: true,
+                }),
+            );
+
+        it('shows the pill when a short history is scrolled up past the visible threshold', () => {
+            const offsetRef = {current: 0};
+            const {result} = renderReadChatHook(offsetRef);
+
+            act(() => {
+                offsetRef.current = shortHistoryScrollOffset;
+                result.current.trackVerticalScrolling(emptyScrollEventMock);
+            });
+
+            expect(result.current.isFloatingMessageCounterVisible).toBe(true);
+        });
+
+        it('keeps the pill visible across consecutive scroll events at the same offset', () => {
+            const offsetRef = {current: 0};
+            const {result} = renderReadChatHook(offsetRef);
+            const visibilityPerScrollEvent: boolean[] = [];
+
+            for (let i = 0; i < 4; i++) {
+                act(() => {
+                    offsetRef.current = shortHistoryScrollOffset;
+                    result.current.trackVerticalScrolling(emptyScrollEventMock);
+                });
+                visibilityPerScrollEvent.push(result.current.isFloatingMessageCounterVisible);
+            }
+
+            expect(visibilityPerScrollEvent).toEqual([true, true, true, true]);
+        });
+
+        it('does not show the pill while still near the newest message', () => {
+            const offsetRef = {current: 0};
+            const {result} = renderReadChatHook(offsetRef);
+
+            act(() => {
+                offsetRef.current = 100;
+                result.current.trackVerticalScrolling(emptyScrollEventMock);
+            });
+
+            expect(result.current.isFloatingMessageCounterVisible).toBe(false);
+        });
+
+        it('does not show the pill for a non-inverted report aligned to top', () => {
+            const offsetRef = {current: 0};
+            const {result} = renderHook(() =>
+                useReportUnreadMessageScrollTracking({
+                    reportID,
+                    currentVerticalScrollingOffsetRef: offsetRef,
+                    onUnreadActionVisible: onUnreadActionVisibleMockFn,
+                    onTrackScrolling: onTrackScrollingMockFn,
+                    hasNewerActions: false,
+                    unreadMarkerReportActionIndex: -1,
+                    isInverted: false,
+                    shouldBeAlignedToTop: true,
+                }),
+            );
+
+            act(() => {
+                offsetRef.current = shortHistoryScrollOffset;
+                result.current.trackVerticalScrolling(emptyScrollEventMock);
+            });
+
+            expect(result.current.isFloatingMessageCounterVisible).toBe(false);
+        });
+
+        it('does not show the pill from the scroll offset when the chat has an unread marker', () => {
+            const offsetRef = {current: 0};
+            const {result} = renderReadChatHook(offsetRef, 1);
+
+            act(() => {
+                offsetRef.current = shortHistoryScrollOffset;
+                result.current.trackVerticalScrolling(emptyScrollEventMock);
+            });
+
+            expect(result.current.isFloatingMessageCounterVisible).toBe(false);
         });
     });
 
@@ -448,6 +541,39 @@ describe('useReportUnreadMessageScrollTracking', () => {
             rerender({});
 
             expect(result.current.isActionBadgeAboveViewport).toBe(true);
+        });
+
+        it.each([true, false])('keeps the action badge hidden despite stale viewable items when inverted is %s', (isInverted) => {
+            // Given a live range containing the target in either list order.
+            const offsetRef = {current: 0};
+            const {result} = renderHook(() =>
+                useReportUnreadMessageScrollTracking({
+                    reportID,
+                    currentVerticalScrollingOffsetRef: offsetRef,
+                    onUnreadActionVisible: onUnreadActionVisibleMockFn,
+                    onTrackScrolling: onTrackScrollingMockFn,
+                    hasNewerActions: false,
+                    unreadMarkerReportActionIndex: -1,
+                    isInverted,
+                    actionBadgeTargetIndex: 3,
+                    getVisibleIndexRange: () => ({startIndex: 2, endIndex: 4}),
+                }),
+            );
+
+            // When the stale snapshot places the target above the viewport.
+            act(() => {
+                result.current.onViewableItemsChanged({
+                    viewableItems: [
+                        {index: isInverted ? 0 : 4, key: 'first', isViewable: true, item: {}},
+                        {index: isInverted ? 1 : 5, key: 'middle', isViewable: true, item: {}},
+                        {index: isInverted ? 2 : 6, key: 'last', isViewable: true, item: {}},
+                    ],
+                    changed: [],
+                });
+            });
+
+            // Then the live range wins and the pill does not flash
+            expect(result.current.isActionBadgeAboveViewport).toBe(false);
         });
     });
 });

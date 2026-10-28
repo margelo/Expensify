@@ -5,6 +5,7 @@ import type {RefObject} from 'react';
 
 import {useEffect, useEffectEvent, useLayoutEffect, useRef} from 'react';
 
+/** Loads adjacent chat pages near visible messages, excluding loading indicators from the boundary calculation. */
 const REPORT_ACTIONS_PAGINATION_THRESHOLD = 0.25;
 
 type PaginationGeometry = {
@@ -275,5 +276,4 @@ function getReportActionsPaginationDistances(
 }
 
 export default useReportActionsPaginationScroll;
-export {getReportActionsPaginationDistances, REPORT_ACTIONS_PAGINATION_THRESHOLD};
-export type {PaginationGeometry, ReportActionsPaginationDistances, UseReportActionsPaginationScrollArguments};
+export {REPORT_ACTIONS_PAGINATION_THRESHOLD};

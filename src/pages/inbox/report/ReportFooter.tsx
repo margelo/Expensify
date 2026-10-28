@@ -4,8 +4,10 @@ import Banner from '@components/Banner';
 import BlockedReportFooter from '@components/BlockedReportFooter';
 import MerchantRuleSuggestionBanner from '@components/MerchantRuleSuggestionBanner';
 import OfflineIndicator from '@components/OfflineIndicator';
+import SupportTicketResolvedFooter from '@components/SupportTicketResolvedFooter';
+import SwipeableView from '@components/SwipeableView';
 
-import useBottomSafeSafeAreaPaddingStyle from '@hooks/useBottomSafeSafeAreaPaddingStyle';
+import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import {useIsReportLoadPending} from '@hooks/useInFlightRequests';
 import useIsAnonymousUser from '@hooks/useIsAnonymousUser';
 import useIsReportReadyToDisplay from '@hooks/useIsReportReadyToDisplay';
@@ -17,13 +19,18 @@ import useReportIsArchived from '@hooks/useReportIsArchived';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
 
+import canUseKeyboardGestureArea from '@libs/canUseKeyboardGestureArea';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import {
     canUserPerformWriteAction,
     canWriteInReport as canWriteInReportUtil,
     isAdminsOnlyPostingRoom as isAdminsOnlyPostingRoomUtil,
     isArchivedNonExpenseReport,
+    isInvoiceReport,
+    isMoneyRequestReport,
     isPublicRoom,
+    isResolvedSupportTicket,
+    isSupportTicket,
     isSystemChat as isSystemChatUtil,
 } from '@libs/ReportUtils';
 
@@ -36,7 +43,7 @@ import type {OnyxEntry} from 'react-native-onyx';
 import {useRoute} from '@react-navigation/native';
 import {isBlockedFromChatSelector} from '@selectors/BlockedFromChat';
 import React from 'react';
-import {View} from 'react-native';
+import {Keyboard, View} from 'react-native';
 
 import EnableNotificationsBanner, {BANNER_COMPOSER_OVERLAP_PX} from './EnableNotificationsBanner';
 import ReportActionCompose from './ReportActionCompose/ReportActionCompose';
@@ -53,17 +60,6 @@ const composerOverlapStyle = {marginTop: -BANNER_COMPOSER_OVERLAP_PX};
  * archived/anonymous/blocked/system chat/admins-only footer.
  */
 function ReportFooter() {
-    const styles = useThemeStyles();
-    const bottomSafeAreaPaddingStyle = useBottomSafeSafeAreaPaddingStyle({addBottomSafeAreaPadding: true, addOfflineIndicatorBottomSafeAreaPadding: false});
-
-    return (
-        <View style={[styles.chatFooter, bottomSafeAreaPaddingStyle]}>
-            <ReportFooterVariants />
-        </View>
-    );
-}
-
-function ReportFooterVariants() {
     const route = useRoute();
     const routeParams = route.params as {reportID?: string} | undefined;
     const reportIDFromRoute = getNonEmptyStringOnyxID(routeParams?.reportID);
@@ -84,6 +80,7 @@ function ReportFooterVariants() {
     const {isCurrentReportLoadedFromOnyx} = useIsReportReadyToDisplay(report, reportIDFromRoute, isReportArchived);
 
     const isAnonymousUser = useIsAnonymousUser();
+    const {accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
     const [isBlockedFromChat] = useOnyx(ONYXKEYS.NVP_BLOCKED_FROM_CHAT, {
         selector: isBlockedFromChatSelector,
     });
@@ -91,6 +88,7 @@ function ReportFooterVariants() {
         selector: policyRoleSelector,
     });
     const [isComposerFullSize = false] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_IS_COMPOSER_FULL_SIZE}${reportIDFromRoute}`);
+    const [reportNameValuePairs] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS}${reportIDFromRoute}`);
     const isLoadingInitialReportActions = useIsReportLoadPending(reportIDFromRoute);
 
     const isUserPolicyAdmin = policyRole === CONST.POLICY.ROLE.ADMIN;
@@ -99,19 +97,39 @@ function ReportFooterVariants() {
 
     const shouldShowComposerOptimistically = !isAnonymousUser && isPublicRoom(report) && !!isLoadingInitialReportActions;
     const canPerformWriteAction = canUserPerformWriteAction(report, isReportArchived) ?? shouldShowComposerOptimistically;
-    const shouldHideComposer = !canPerformWriteAction || isBlockedFromChat;
+    const shouldHideComposer = !canPerformWriteAction || (isBlockedFromChat ?? false) || (isOffline && isSupportTicket(report));
     const canWriteInReport = canWriteInReportUtil(report);
     const isSystemChat = isSystemChatUtil(report);
     const isAdminsOnlyPostingRoom = isAdminsOnlyPostingRoomUtil(report);
     const shouldShowComposerForActiveEditDraft = useShouldShowComposerForActiveEditDraft();
+    const shouldShowResolvedSupportTicketFooter = isResolvedSupportTicket(report) && report?.ownerAccountID === currentUserAccountID;
 
     if (!isCurrentReportLoadedFromOnyx || !report || !reportIDFromRoute) {
         return null;
     }
 
+    const isKeyboardAwareLayout = canUseKeyboardGestureArea() && !isMoneyRequestReport(report) && !isInvoiceReport(report) && !isComposerFullSize;
+    const chatFooterStyles = {
+        ...styles.chatFooter,
+        minHeight: !isOffline ? CONST.CHAT_FOOTER_MIN_HEIGHT : 0,
+    };
+
+    if (shouldShowResolvedSupportTicketFooter) {
+        return (
+            <View style={[styles.chatFooter, styles.mt4, styles.mb5]}>
+                <SupportTicketResolvedFooter
+                    reportID={reportIDFromRoute}
+                    isOffline={isOffline}
+                    shouldShowReopenButton={!reportNameValuePairs?.reopenedAsReportID}
+                />
+            </View>
+        );
+    }
+
     // Happy path — user can compose
     if (!shouldHideComposer) {
-        const composer = <ReportActionCompose reportID={reportIDFromRoute} />;
+        const composerContent = <ReportActionCompose reportID={reportIDFromRoute} />;
+        const composer = isKeyboardAwareLayout ? composerContent : <SwipeableView onSwipeDown={Keyboard.dismiss}>{composerContent}</SwipeableView>;
         // The callout decides for itself whether this mount suits the layout and the composer size.
         const merchantRuleBanner = (
             <MerchantRuleSuggestionBanner
@@ -123,7 +141,7 @@ function ReportFooterVariants() {
             />
         );
         return (
-            <View style={[{minHeight: !isOffline ? CONST.CHAT_FOOTER_MIN_HEIGHT : 0}, isComposerFullSize && styles.chatFooterFullCompose]}>
+            <View style={[chatFooterStyles, isComposerFullSize && styles.chatFooterFullCompose]}>
                 {merchantRuleBanner}
                 {shouldShowEnableNotificationsBanner ? (
                     <>
@@ -140,7 +158,7 @@ function ReportFooterVariants() {
     // Archived room
     if (isArchivedRoom) {
         return (
-            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <ArchivedReportFooter reportID={reportIDFromRoute} />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -154,7 +172,7 @@ function ReportFooterVariants() {
     // Anonymous user
     if (isAnonymousUser) {
         return (
-            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <AnonymousReportFooter reportID={reportIDFromRoute} />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -168,7 +186,7 @@ function ReportFooterVariants() {
     // Blocked from chat
     if (isBlockedFromChat) {
         return (
-            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <BlockedReportFooter />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -182,7 +200,7 @@ function ReportFooterVariants() {
     // System chat where user can't write
     if (!canWriteInReport && isSystemChat) {
         return (
-            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <SystemChatReportFooterMessage />
                 {!isSmallScreenWidth && (
                     <View style={styles.offlineIndicatorContainer}>
@@ -196,12 +214,13 @@ function ReportFooterVariants() {
     // Admins-only room — keep the banner visible; mount the composer above it while editing on narrow screens.
     if (isAdminsOnlyPostingRoom && !isUserPolicyAdmin) {
         const isEditingWithComposer = shouldShowComposerForActiveEditDraft;
+        const editComposer = <ReportActionCompose.EditOnly reportID={reportIDFromRoute} />;
 
         return (
-            <View style={[!isEditingWithComposer && styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.chatFooter, !isEditingWithComposer && styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 {isEditingWithComposer && (
                     <View style={[isComposerFullSize ? styles.chatFooterFullCompose : undefined, styles.mb2]}>
-                        <ReportActionCompose.EditOnly reportID={reportIDFromRoute} />
+                        {isKeyboardAwareLayout ? editComposer : <SwipeableView onSwipeDown={Keyboard.dismiss}>{editComposer}</SwipeableView>}
                     </View>
                 )}
                 <Banner
@@ -227,7 +246,7 @@ function ReportFooterVariants() {
     // indicators keep priority.
     if (!canWriteInReport) {
         return (
-            <View style={[styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
+            <View style={[styles.chatFooter, styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 <Banner
                     containerStyles={[styles.chatFooterBanner]}
                     text={translate('readOnlyConversation')}

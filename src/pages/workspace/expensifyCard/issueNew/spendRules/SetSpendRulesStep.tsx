@@ -5,7 +5,6 @@ import type {FormInputErrors, FormOnyxValues} from '@components/Form/types';
 import FormHelpMessage from '@components/FormHelpMessage';
 import InteractiveStepWrapper from '@components/InteractiveStepWrapper';
 import MenuItemField from '@components/MenuItem/presets/MenuItemField';
-import MenuItemWithTopDescription from '@components/MenuItemWithTopDescription';
 import {usePersonalDetails} from '@components/OnyxListItemProvider';
 import SpendRuleRestrictionTypeToggle from '@components/SpendRules/SpendRuleRestrictionTypeToggle';
 import TabSelectorBase from '@components/TabSelector/TabSelectorBase';
@@ -37,7 +36,7 @@ import type {IssueNewCardData} from '@src/types/onyx/Card';
 import type {ValueOf} from 'type-fest';
 
 import {format, toZonedTime} from 'date-fns-tz';
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useState} from 'react';
 import {View} from 'react-native';
 
 type SetSpendRulesStepProps = {
@@ -89,12 +88,7 @@ function SetSpendRulesStep({policyID, stepNames, startStepIndex}: SetSpendRulesS
     const assigneePersonalDetails = Object.values(personalDetails ?? {}).find((detail) => detail?.login === issueNewCard?.data?.assigneeEmail);
     const assigneeTimeZone = assigneePersonalDetails?.timezone?.selected;
 
-    const minDate = useMemo(() => {
-        if (!assigneeTimeZone) {
-            return new Date();
-        }
-        return toZonedTime(new Date(), assigneeTimeZone);
-    }, [assigneeTimeZone]);
+    const minDate = !assigneeTimeZone ? new Date() : toZonedTime(new Date(), assigneeTimeZone);
 
     const spendRuleTabs = [
         {
@@ -172,7 +166,7 @@ function SetSpendRulesStep({policyID, stepNames, startStepIndex}: SetSpendRulesS
     const hasAnyMerchant = !!spendRuleForm.merchantNames?.some((name) => name.trim() !== '') && !isRestrictMerchantsOff;
     const hasAnyRuleApplied = hasAnyMerchant || hasAnyCategory || hasMaxAmount || hasAnyCurrency;
 
-    const getSpendRuleErrorMessage = useCallback(() => {
+    const getSpendRuleErrorMessage = () => {
         if (!spendRuleEnabled) {
             return '';
         }
@@ -186,7 +180,7 @@ function SetSpendRulesStep({policyID, stepNames, startStepIndex}: SetSpendRulesS
         }
 
         return '';
-    }, [hasAnyRuleApplied, spendRuleEnabled, spendRuleID, spendRuleOption, translate]);
+    };
 
     const submit = (values: FormOnyxValues<typeof ONYXKEYS.FORMS.ISSUE_NEW_EXPENSIFY_CARD_FORM>) => {
         const formSpendRuleError = getSpendRuleErrorMessage();
@@ -313,27 +307,23 @@ function SetSpendRulesStep({policyID, stepNames, startStepIndex}: SetSpendRulesS
 
                                 {spendRuleOption === CONST.EXPENSIFY_CARD.SPEND_RULE_OPTION.CREATE_NEW && (
                                     <View>
-                                        <MenuItemWithTopDescription
-                                            shouldShowRightIcon
-                                            title={spendRuleMaxAmountTitle}
-                                            titleStyle={styles.flex1}
-                                            description={translate('workspace.rules.spendRules.maxAmount')}
+                                        <MenuItemField
+                                            name={translate('workspace.rules.spendRules.maxAmount')}
+                                            value={spendRuleMaxAmountTitle}
                                             sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.RULES.MERCHANT_RULE_SECTION_ITEM}
                                             onPress={() => {
                                                 setSpendRuleErrorMessage('');
                                                 Navigation.navigate(createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_EXPENSIFY_CARD_ISSUE_NEW_SPEND_RULE_MAX_AMOUNT.path));
                                             }}
                                         />
-                                        <MenuItemWithTopDescription
-                                            description={translate('workspace.rules.spendRules.permittedCurrencies')}
+                                        <MenuItemField
+                                            name={translate('workspace.rules.spendRules.permittedCurrencies')}
+                                            value={currenciesTitle}
+                                            sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.RULES.CURRENCY_SELECTOR}
                                             onPress={() => {
                                                 setSpendRuleErrorMessage('');
                                                 Navigation.navigate(createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_EXPENSIFY_CARD_ISSUE_NEW_SPEND_RULE_CURRENCY.path));
                                             }}
-                                            shouldShowRightIcon
-                                            title={currenciesTitle}
-                                            titleStyle={styles.flex1}
-                                            sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.RULES.CURRENCY_SELECTOR}
                                         />
 
                                         <View style={[styles.ph5, styles.pv3]}>
@@ -344,24 +334,20 @@ function SetSpendRulesStep({policyID, stepNames, startStepIndex}: SetSpendRulesS
                                         </View>
                                         {!isRestrictMerchantsOff && (
                                             <>
-                                                <MenuItemWithTopDescription
-                                                    shouldShowRightIcon
-                                                    numberOfLinesTitle={2}
-                                                    titleStyle={styles.flex1}
-                                                    title={spendRuleMerchantNamesTitle}
-                                                    description={merchantsDescription}
+                                                <MenuItemField
+                                                    name={merchantsDescription}
+                                                    value={spendRuleMerchantNamesTitle}
+                                                    numberOfLinesValue={2}
                                                     sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.RULES.MERCHANT_RULE_SECTION_ITEM}
                                                     onPress={() => {
                                                         setSpendRuleErrorMessage('');
                                                         Navigation.navigate(createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_EXPENSIFY_CARD_ISSUE_NEW_SPEND_RULE_MERCHANTS.path));
                                                     }}
                                                 />
-                                                <MenuItemWithTopDescription
-                                                    shouldShowRightIcon
-                                                    numberOfLinesTitle={2}
-                                                    titleStyle={styles.flex1}
-                                                    title={spendRuleCategoriesTitle}
-                                                    description={merchantTypesDescription}
+                                                <MenuItemField
+                                                    name={merchantTypesDescription}
+                                                    value={spendRuleCategoriesTitle}
+                                                    numberOfLinesValue={2}
                                                     sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.RULES.MERCHANT_RULE_SECTION_ITEM}
                                                     onPress={() => {
                                                         setSpendRuleErrorMessage('');
