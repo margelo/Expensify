@@ -3,7 +3,6 @@ import ComposeProviders from '@components/ComposeProviders';
 import DelegateNoAccessModalProvider from '@components/DelegateNoAccessModalProvider';
 import EnableGlobalReimbursementsPayModal from '@components/EnableGlobalReimbursementsPayModal';
 import ExportDownloadStatusManager from '@components/ExportDownloadStatusManager';
-import {KeyboardDismissibleFlatListContextProvider} from '@components/KeyboardDismissibleFlatList/KeyboardDismissibleFlatListContext';
 import KYCWallContextProvider from '@components/KYCWall/KYCWallContext';
 import LockedAccountModalProvider from '@components/LockedAccountModalProvider';
 import {MultifactorAuthenticationContextProviders} from '@components/MultifactorAuthentication/Context';
@@ -196,7 +195,6 @@ function AuthScreens() {
                         TravelCVVContextProvider,
                         KYCWallContextProvider,
                         WideRHPContextProvider,
-                        KeyboardDismissibleFlatListContextProvider,
                         SidebarOrderedReportsContextProvider,
                         SearchContextProvider,
                         LockedAccountModalProvider,

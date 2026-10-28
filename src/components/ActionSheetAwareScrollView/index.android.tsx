@@ -5,12 +5,9 @@ import type {ActionSheetAwareScrollViewProps, RenderActionSheetAwareScrollViewCo
 
 import {Actions, ActionSheetAwareScrollViewProvider, useActionSheetAwareScrollViewActions, useActionSheetAwareScrollViewState} from './ActionSheetAwareScrollViewContext';
 import useActionSheetAwareScrollViewRef from './useActionSheetAwareScrollViewRef';
-import usePreventScrollOnKeyboardInteraction from './usePreventScrollOnKeyboardInteraction';
 
 function ActionSheetAwareScrollView({style, children, ref, ...restProps}: ActionSheetAwareScrollViewProps) {
-    const {onRef, animatedRef} = useActionSheetAwareScrollViewRef(ref);
-
-    usePreventScrollOnKeyboardInteraction({scrollViewRef: animatedRef});
+    const {onRef} = useActionSheetAwareScrollViewRef(ref);
 
     return (
         <Reanimated.ScrollView

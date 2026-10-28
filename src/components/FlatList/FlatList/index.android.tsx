@@ -1,5 +1,3 @@
-import KeyboardDismissibleFlatList from '@components/KeyboardDismissibleFlatList';
-
 import useThemeStyles from '@hooks/useThemeStyles';
 
 import type {NativeScrollEvent, NativeSyntheticEvent} from 'react-native';
@@ -12,7 +10,7 @@ import type {CustomFlatListProps} from './types';
 
 // FlatList wrapped with the freeze component will lose its scroll state when frozen (only for Android).
 // CustomFlatList saves the offset and use it for scrollToOffset() when unfrozen.
-function CustomFlatList<T>({ref, enableAnimatedKeyboardDismissal = false, onMomentumScrollEnd, onScroll, shouldHideContent = false, ...props}: CustomFlatListProps<T>) {
+function CustomFlatList<T>({ref, onMomentumScrollEnd, onScroll, shouldHideContent = false, ...props}: CustomFlatListProps<T>) {
     const lastScrollOffsetRef = useRef(0);
     const styles = useThemeStyles();
 
@@ -45,18 +43,6 @@ function CustomFlatList<T>({ref, enableAnimatedKeyboardDismissal = false, onMome
     );
 
     const contentContainerStyle = [props.contentContainerStyle, shouldHideContent && styles.opacity0];
-
-    if (enableAnimatedKeyboardDismissal) {
-        return (
-            <KeyboardDismissibleFlatList
-                {...props}
-                ref={ref}
-                onScroll={handleScroll}
-                onMomentumScrollEnd={handleScrollEnd}
-                contentContainerStyle={contentContainerStyle}
-            />
-        );
-    }
 
     return (
         <FlatList<T>
