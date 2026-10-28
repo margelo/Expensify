@@ -4,40 +4,23 @@ import FlashList from '@components/FlashList';
 import MVCPFlatList from '@components/FlatList/FlatList';
 import type * as MVCPList from '@components/FlatList/FlatList';
 import ActiveHoverable from '@components/Hoverable/ActiveHoverable';
-import type * as KeyboardList from '@components/KeyboardDismissibleFlatList';
-import KeyboardDismissibleFlatList from '@components/KeyboardDismissibleFlatList/index';
 
 import type * as ComposerScrollEvents from '@hooks/useEmitComposerScrollEvents';
 
 import CONST from '@src/CONST';
 
-import type {NativeScrollEvent, NativeSyntheticEvent, ScrollViewProps, ViewProps} from 'react-native';
-import type * as Reanimated from 'react-native-reanimated';
+import type {ScrollViewProps, ViewProps} from 'react-native';
 
 import React from 'react';
 import {DeviceEventEmitter, View} from 'react-native';
 
 jest.mock('@hooks/useEmitComposerScrollEvents', () => jest.requireActual<typeof ComposerScrollEvents>('@hooks/useEmitComposerScrollEvents/index.ts'));
-jest.mock('@components/KeyboardDismissibleFlatList/index', () => jest.requireActual<typeof KeyboardList>('@components/KeyboardDismissibleFlatList/index.tsx'));
 jest.mock('@components/FlatList/FlatList', () => jest.requireActual<typeof MVCPList>('@components/FlatList/FlatList/index.tsx'));
 jest.mock('@hooks/useThemeStyles', () => () => ({}));
 jest.mock('@shopify/flash-list', () => ({
     FlashList: (props: ScrollViewProps) => {
         const {ScrollView} = jest.requireActual<{ScrollView: React.ComponentType<ScrollViewProps>}>('react-native');
         return <ScrollView {...props} />;
-    },
-}));
-jest.mock('@components/AnimatedFlatListWithCellRenderer', () => (props: ScrollViewProps) => {
-    const {ScrollView} = jest.requireActual<{ScrollView: React.ComponentType<ScrollViewProps>}>('react-native');
-    return <ScrollView {...props} />;
-});
-jest.mock('react-native-reanimated', () => ({
-    ...jest.requireActual<typeof Reanimated>('react-native-reanimated/mock'),
-    useAnimatedScrollHandler: ({onScroll}: {onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void}) => onScroll,
-    useComposedEventHandler: (handlers: Array<((event: NativeSyntheticEvent<NativeScrollEvent>) => void) | null>) => (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-        for (const handler of handlers) {
-            handler?.(event);
-        }
     },
 }));
 
@@ -66,7 +49,6 @@ describe('Composer scroll events on shared lists', () => {
     it.each([
         ['FlashList', FlashList],
         ['MVCP FlatList', MVCPFlatList],
-        ['keyboard dismissible FlatList', KeyboardDismissibleFlatList],
     ] as const)('%s suppresses hover throughout scrolling and forwards the scroll event', (_name, List) => {
         // Given an inverted list that already emits composer scroll events.
         const emit = jest.spyOn(DeviceEventEmitter, 'emit');
@@ -118,7 +100,6 @@ describe('Composer scroll events on shared lists', () => {
     it.each([
         ['FlashList', FlashList],
         ['MVCP FlatList', MVCPFlatList],
-        ['keyboard dismissible FlatList', KeyboardDismissibleFlatList],
     ] as const)('%s forwards non-inverted scrolling without changing global hover state', (_name, List) => {
         // Given a non-inverted shared list and an unrelated hovered message.
         const emit = jest.spyOn(DeviceEventEmitter, 'emit');
