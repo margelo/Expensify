@@ -1,6 +1,5 @@
 import useFlatListHandle from '@components/FlatList/hooks/useFlatListHandle';
 import type {FlatListInnerRefType} from '@components/FlatList/hooks/useFlatListHandle';
-import KeyboardDismissibleFlatList from '@components/KeyboardDismissibleFlatList';
 
 import useEmitComposerScrollEvents from '@hooks/useEmitComposerScrollEvents';
 import useThemeStyles from '@hooks/useThemeStyles';
@@ -17,7 +16,6 @@ function CustomFlatList<T>({
     ref,
     maintainVisibleContentPosition: maintainVisibleContentPositionProp,
     shouldDisableVisibleContentPosition,
-    enableAnimatedKeyboardDismissal = false,
     onMomentumScrollBegin,
     onMomentumScrollEnd,
     onScroll: onScrollProp,
@@ -36,7 +34,7 @@ function CustomFlatList<T>({
         setIsScrolling(false);
     };
 
-    const emitComposerScrollEvents = useEmitComposerScrollEvents({enabled: !enableAnimatedKeyboardDismissal && !!restProps.inverted});
+    const emitComposerScrollEvents = useEmitComposerScrollEvents({enabled: !!restProps.inverted});
     const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
         onScrollProp?.(e);
         emitComposerScrollEvents();
@@ -54,21 +52,6 @@ function CustomFlatList<T>({
     const maintainVisibleContentPosition = isScrolling || shouldDisableVisibleContentPosition ? undefined : maintainVisibleContentPositionProp;
 
     const contentContainerStyle = [restProps.contentContainerStyle, shouldHideContent && styles.opacity0];
-
-    if (enableAnimatedKeyboardDismissal) {
-        return (
-            <KeyboardDismissibleFlatList
-                {...restProps}
-                ref={listRef}
-                maintainVisibleContentPosition={maintainVisibleContentPosition}
-                // Composer scroll events are emitted in `KeyboardDismissibleFlatList` separately, therefore we pass the `onScroll` prop instead of the `handleScroll` callback.
-                onScroll={onScrollProp}
-                onMomentumScrollBegin={handleScrollBegin}
-                onMomentumScrollEnd={handleScrollEnd}
-                contentContainerStyle={contentContainerStyle}
-            />
-        );
-    }
 
     return (
         <FlatList<T>

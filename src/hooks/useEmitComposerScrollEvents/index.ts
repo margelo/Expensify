@@ -9,8 +9,6 @@ type UseEmitComposerScrollEventsOptions = {
 
 /**
  * This is used to trigger scroll behavior in the composer on web. On native, this is a no-op.
- * Since our custom FlatList implementation can either be a `KeyboardDismissibleFlatList` or a regular `FlatList`,
- * we need to emit the scroll events inside the scroll handler of the specific implementation.
  * @returns A function that can be used to emit the scroll events.
  */
 function useEmitComposerScrollEvents(options?: UseEmitComposerScrollEventsOptions) {
