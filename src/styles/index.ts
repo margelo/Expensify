@@ -2346,6 +2346,10 @@ const staticStyles = (theme: ThemeColors) =>
             paddingRight: 10,
         },
 
+        reportActionsPaginationLoadingIndicator: {
+            height: CONST.PAGINATION_LOADING_INDICATOR_HEIGHT,
+        },
+
         chatContentScrollView: {
             flexGrow: 1,
             justifyContent: 'flex-start',
