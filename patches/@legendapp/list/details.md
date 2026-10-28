@@ -14,3 +14,10 @@ The Fabric content-size fix from https://github.com/LegendApp/legend-list/commit
 ### Related upstream work
 
 - https://github.com/LegendApp/legend-list/pull/583 refreshes the cached end-follow state when `maintainScrollAtEndThreshold` changes. This supports a fixed pixel follow distance across viewport changes when using LegendList's built-in end following.
+
+### [@legendapp+list+3.7.0+002+keyboard-scroll-view-component.patch](@legendapp+list+3.7.0+002+keyboard-scroll-view-component.patch)
+
+- Reason: Exposes and forwards `ScrollViewComponent` through `KeyboardAwareLegendList` so RNKC uses the action-sheet-aware scroll view. Message menus keep their keyboard spacing and scroll ref while RNKC owns keyboard-aware scrolling.
+- Upstream source: https://github.com/LegendApp/legend-list/blob/v3.7.0/src/integrations/keyboard.tsx
+- E/App issue: https://github.com/Expensify/App/issues/54270
+- Insets: Keep LegendList 3.7.0's inset reporting on both platforms. Its current integration manages iOS closing insets itself.

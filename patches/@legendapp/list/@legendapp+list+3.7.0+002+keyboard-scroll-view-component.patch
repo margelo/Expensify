@@ -1,0 +1,76 @@
+diff --git a/node_modules/@legendapp/list/keyboard.js b/node_modules/@legendapp/list/keyboard.js
+--- a/node_modules/@legendapp/list/keyboard.js
++++ b/node_modules/@legendapp/list/keyboard.js
+@@ -132,6 +132,7 @@
+     freeze,
+     keyboardLiftBehavior,
+     keyboardOffset,
++    ScrollViewComponent,
+     refScrollView,
+     ...rest
+   } = props;
+@@ -295,6 +296,7 @@
+           freeze,
+           keyboardLiftBehavior,
+           offset: keyboardOffset,
++          ScrollViewComponent,
+           onContentInsetChange,
+           onContentSizeChange: (width, height) => {
+             var _a2;
+@@ -317,6 +319,7 @@
+       freeze,
+       keyboardLiftBehavior,
+       keyboardOffset,
++      ScrollViewComponent,
+       onContentInsetChange
+     ]
+   );
+diff --git a/node_modules/@legendapp/list/keyboard.mjs b/node_modules/@legendapp/list/keyboard.mjs
+--- a/node_modules/@legendapp/list/keyboard.mjs
++++ b/node_modules/@legendapp/list/keyboard.mjs
+@@ -111,6 +111,7 @@
+     freeze,
+     keyboardLiftBehavior,
+     keyboardOffset,
++    ScrollViewComponent,
+     refScrollView,
+     ...rest
+   } = props;
+@@ -274,6 +275,7 @@
+           freeze,
+           keyboardLiftBehavior,
+           offset: keyboardOffset,
++          ScrollViewComponent,
+           onContentInsetChange,
+           onContentSizeChange: (width, height) => {
+             var _a2;
+@@ -296,6 +298,7 @@
+       freeze,
+       keyboardLiftBehavior,
+       keyboardOffset,
++      ScrollViewComponent,
+       onContentInsetChange
+     ]
+   );
+diff --git a/node_modules/@legendapp/list/keyboard.d.ts b/node_modules/@legendapp/list/keyboard.d.ts
+--- a/node_modules/@legendapp/list/keyboard.d.ts
++++ b/node_modules/@legendapp/list/keyboard.d.ts
+@@ -318,6 +318,10 @@
+ };
+ 
+ type KeyboardChatScrollViewPropsUnique = Omit<KeyboardChatScrollViewProps, keyof ScrollViewProps | "inverted" | "ScrollViewComponent" | "blankSpace" | "extraContentPadding" | "onContentInsetChange" | "offset">;
++type KeyboardAwareScrollViewComponentProps = NonNullable<KeyboardChatScrollViewProps["ScrollViewComponent"]> extends React.ForwardRefExoticComponent<infer Props> ? Omit<Props, "ref"> & {
++    ref?: React.Ref<React.ElementRef<typeof ScrollViewComponent>>;
++} : never;
++type KeyboardAwareScrollViewComponent = (props: KeyboardAwareScrollViewComponentProps) => React.ReactElement | null;
+ type ScrollMessageToEndOptions = {
+     animated: boolean;
+     closeKeyboard: boolean;
+@@ -349,6 +353,7 @@
+     anchoredEndSpace?: AnchoredEndSpaceConfig;
+     contentInsetEndAdjustment?: SharedValue<number>;
+     keyboardOffset?: number;
++    ScrollViewComponent?: KeyboardAwareScrollViewComponent;
+ } & React.RefAttributes<LegendListRef>) => React.ReactElement | null;
+ 
+ export { KeyboardAwareLegendList, useKeyboardChatComposerInset, useKeyboardScrollToEnd };

@@ -168,6 +168,10 @@ export default function setupMockLegendList() {
         };
     });
 
+    jest.mock('@legendapp/list/keyboard', () => ({
+        KeyboardAwareLegendList: jest.requireMock<typeof LegendListModule>('@legendapp/list/react-native').LegendList,
+    }));
+
     jest.mock('@legendapp/list/reanimated', () => ({
         AnimatedLegendList: jest.requireMock<typeof LegendListModule>('@legendapp/list/react-native').LegendList,
     }));

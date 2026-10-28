@@ -3,9 +3,14 @@ import {act, render, screen} from '@testing-library/react-native';
 import ComposeProviders from '@components/ComposeProviders';
 import {LocaleContextProvider} from '@components/LocaleContextProvider';
 import OnyxListItemProvider from '@components/OnyxListItemProvider';
+import SwipeableView from '@components/SwipeableView';
+import type SwipeableViewProps from '@components/SwipeableView/types';
 
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 
+import canUseKeyboardGestureArea from '@libs/canUseKeyboardGestureArea';
+
+import ReportActionCompose from '@pages/inbox/report/ReportActionCompose/ReportActionCompose';
 import ReportFooter from '@pages/inbox/report/ReportFooter';
 
 import CONST from '@src/CONST';
@@ -15,6 +20,7 @@ import type * as ReactNavigation from '@react-navigation/native';
 
 import {useRoute} from '@react-navigation/native';
 import React from 'react';
+import {Keyboard} from 'react-native';
 import Onyx from 'react-native-onyx';
 
 import waitForBatchedUpdatesWithAct from '../utils/waitForBatchedUpdatesWithAct';
@@ -22,6 +28,17 @@ import waitForBatchedUpdatesWithAct from '../utils/waitForBatchedUpdatesWithAct'
 // Mock useResponsiveLayout so each test can pin an exact layout combination.
 jest.mock('@hooks/useResponsiveLayout', () => jest.fn());
 const mockedUseResponsiveLayout = jest.mocked(useResponsiveLayout);
+
+jest.mock('@pages/inbox/report/ReportActionCompose/ReportActionCompose', () => jest.fn(() => null));
+const mockedReportActionCompose = jest.mocked(ReportActionCompose);
+
+jest.mock('@components/MerchantRuleSuggestionBanner', () => jest.fn(() => null));
+
+jest.mock('@components/SwipeableView', () => jest.fn(({children}: SwipeableViewProps) => children));
+const mockedSwipeableView = jest.mocked(SwipeableView);
+
+jest.mock('@libs/canUseKeyboardGestureArea', () => jest.fn(() => true));
+const mockedCanUseKeyboardGestureArea = jest.mocked(canUseKeyboardGestureArea);
 
 jest.mock('@react-navigation/native', () => {
     const actualNav = jest.requireActual<typeof ReactNavigation>('@react-navigation/native');
@@ -82,6 +99,7 @@ describe('ReportFooter', () => {
 
     beforeEach(async () => {
         mockedUseRoute.mockReturnValue({key: 'report', name: 'Report', params: {reportID: REPORT_ID}});
+        mockedCanUseKeyboardGestureArea.mockReturnValue(true);
         await act(async () => {
             await Onyx.merge(ONYXKEYS.NETWORK, {shouldForceOffline: true});
         });
@@ -92,6 +110,45 @@ describe('ReportFooter', () => {
             await Onyx.clear();
         });
         jest.clearAllMocks();
+        jest.restoreAllMocks();
+    });
+
+    it.each([
+        {name: 'regular chat', type: CONST.REPORT.TYPE.CHAT, fullSize: false, gestureSupported: true, usesLegacySwipe: false},
+        {name: 'expanded chat', type: CONST.REPORT.TYPE.CHAT, fullSize: true, gestureSupported: true, usesLegacySwipe: true},
+        {name: 'expense report', type: CONST.REPORT.TYPE.EXPENSE, fullSize: false, gestureSupported: true, usesLegacySwipe: true},
+        {name: 'chat on older Android', type: CONST.REPORT.TYPE.CHAT, fullSize: false, gestureSupported: false, usesLegacySwipe: true},
+    ])('preserves keyboard dismissal for $name', async ({type, fullSize, gestureSupported, usesLegacySwipe}) => {
+        // Given a writable report with its requested composer size.
+        mockedCanUseKeyboardGestureArea.mockReturnValue(gestureSupported);
+        mockLayout({isSmallScreenWidth: true, isInNarrowPaneModal: false});
+        const dismissKeyboard = jest.spyOn(Keyboard, 'dismiss');
+        await act(async () => {
+            await Onyx.merge(ONYXKEYS.SESSION, {
+                accountID: 1,
+                email: 'tester@example.com',
+            });
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`, {
+                reportID: REPORT_ID,
+                type,
+            });
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT_IS_COMPOSER_FULL_SIZE}${REPORT_ID}`, fullSize);
+        });
+
+        // When the composer mounts.
+        renderReportFooter();
+        await waitForBatchedUpdatesWithAct();
+
+        // Then the keyboard controller handles regular chat swipes while legacy layouts retain their dismissal callback.
+        expect(mockedReportActionCompose).toHaveBeenCalled();
+        if (!usesLegacySwipe) {
+            expect(mockedSwipeableView).not.toHaveBeenCalled();
+            return;
+        }
+        const swipeProps = mockedSwipeableView.mock.calls.at(-1)?.[0];
+        expect(swipeProps).toBeDefined();
+        swipeProps?.onSwipeDown();
+        expect(dismissKeyboard).toHaveBeenCalledTimes(1);
     });
 
     describe.each([

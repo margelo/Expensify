@@ -1,5 +1,6 @@
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react-native';
 
+import ActionSheetAwareScrollView from '@components/ActionSheetAwareScrollView';
 import type {RenderActionSheetAwareScrollViewComponent} from '@components/ActionSheetAwareScrollView/types';
 import allowLegendListItemOverflow from '@components/LegendList/allowLegendListItemOverflow';
 
@@ -18,6 +19,7 @@ import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useSidePanelState from '@hooks/useSidePanelState';
 import useTransactionsAndViolationsForReport from '@hooks/useTransactionsAndViolationsForReport';
 
+import canUseKeyboardGestureArea from '@libs/canUseKeyboardGestureArea';
 import DateUtils from '@libs/DateUtils';
 import * as ReportActionsUtils from '@libs/ReportActionsUtils';
 
@@ -235,9 +237,16 @@ jest.mock('@pages/inbox/report/ReportActionsListPaddingView', () => {
     return jest.fn(({children}: {children: React.ReactNode}) => reactModule.createElement(reactModule.Fragment, null, children));
 });
 jest.mock('@pages/inbox/report/UserTypingEventListener', () => jest.fn(() => null));
+
+jest.mock('@libs/canUseKeyboardGestureArea', () => jest.fn(() => true));
 jest.mock('@pages/inbox/report/ReportActionItemCreated', () => jest.fn(() => null));
 
 type MockLegendListProps = {
+    ScrollViewComponent?: typeof ActionSheetAwareScrollView;
+    keyboardOffset?: number;
+    keyboardDismissMode?: string;
+    automaticallyAdjustContentInsets?: boolean;
+    contentInsetAdjustmentBehavior?: string;
     initialScrollIndex?: {index: number; viewOffset?: number; viewPosition?: number};
     estimatedHeaderSize?: number;
     ListHeaderComponent?: React.ReactNode;
@@ -575,14 +584,73 @@ describe('ReportActionsList (body)', () => {
             renderReportActionsList();
             const listProps = getCapturedListProps();
 
-            // When LegendList requests native scroll events on every frame.
-            const scrollView = listProps?.renderScrollComponent?.({scrollEventThrottle: 0});
+            // When the keyboard controller requests native scroll events on every frame.
+            const ScrollViewComponent = listProps?.ScrollViewComponent;
+            if (!ScrollViewComponent) {
+                throw new Error('Expected the action-sheet-aware keyboard scroller');
+            }
+            render(
+                <ScrollViewComponent
+                    testID="keyboard-aware-scroller"
+                    scrollEventThrottle={0}
+                />,
+            );
 
             // Then the wrapper preserves them while LegendList separately throttles the app callback.
-            expect(scrollView?.props.scrollEventThrottle).toBe(0);
+            expect(screen.getByTestId('keyboard-aware-scroller').props.scrollEventThrottle).toBe(0);
             expect(listProps?.scrollEventThrottle).toBe(16);
         } finally {
             platform.restore();
+        }
+    });
+
+    it('composes chat keyboard scrolling with the action-sheet-aware scroll view', () => {
+        // Given a chat using the chronological list.
+        mockUseNetwork.mockReturnValue({isOffline: false});
+
+        // When its list mounts after the viewport is measured.
+        renderReportActionsList();
+
+        // Then the keyboard controller owns keyboard scrolling and keeps the action-sheet-aware native view.
+        expect(getCapturedListProps()).toMatchObject({
+            ScrollViewComponent: ActionSheetAwareScrollView,
+            keyboardDismissMode: 'interactive',
+            automaticallyAdjustContentInsets: false,
+            contentInsetAdjustmentBehavior: 'never',
+            maintainScrollAtEnd: false,
+        });
+        expect(getCapturedListProps()?.renderScrollComponent).toBeUndefined();
+    });
+
+    it('keeps the existing scroller when keyboard gestures are unavailable', () => {
+        // Given an Android version that does not support the keyboard controller's gesture area.
+        jest.mocked(canUseKeyboardGestureArea).mockReturnValue(false);
+        try {
+            // When its chat list mounts.
+            renderReportActionsList();
+
+            // Then the screen can keep its existing keyboard avoidance and swipe dismissal.
+            expect(getCapturedListProps()?.ScrollViewComponent).toBeUndefined();
+            expect(getCapturedListProps()?.keyboardDismissMode).toBeUndefined();
+        } finally {
+            jest.mocked(canUseKeyboardGestureArea).mockReturnValue(true);
+        }
+    });
+
+    it('retains the existing scroller for expense reports', () => {
+        // Given an expense report whose screen still uses keyboard avoidance.
+        const reportType = mockReport.type;
+        mockReport.type = CONST.REPORT.TYPE.EXPENSE;
+        try {
+            // When it renders its chronological message rows.
+            renderReportActionsList();
+
+            // Then it does not add a second keyboard adjustment.
+            expect(getCapturedListProps()?.ScrollViewComponent).toBeUndefined();
+            expect(getCapturedListProps()?.keyboardOffset).toBeUndefined();
+            expect(getCapturedListProps()?.keyboardDismissMode).toBeUndefined();
+        } finally {
+            mockReport.type = reportType;
         }
     });
 

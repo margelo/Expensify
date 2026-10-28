@@ -19,12 +19,15 @@ import useReportIsArchived from '@hooks/useReportIsArchived';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
 
+import canUseKeyboardGestureArea from '@libs/canUseKeyboardGestureArea';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import {
     canUserPerformWriteAction,
     canWriteInReport as canWriteInReportUtil,
     isAdminsOnlyPostingRoom as isAdminsOnlyPostingRoomUtil,
     isArchivedNonExpenseReport,
+    isInvoiceReport,
+    isMoneyRequestReport,
     isPublicRoom,
     isResolvedSupportTicket,
     isSupportTicket,
@@ -105,7 +108,11 @@ function ReportFooter() {
         return null;
     }
 
-    const chatFooterStyles = {...styles.chatFooter, minHeight: !isOffline ? CONST.CHAT_FOOTER_MIN_HEIGHT : 0};
+    const isKeyboardAwareLayout = canUseKeyboardGestureArea() && !isMoneyRequestReport(report) && !isInvoiceReport(report) && !isComposerFullSize;
+    const chatFooterStyles = {
+        ...styles.chatFooter,
+        minHeight: !isOffline ? CONST.CHAT_FOOTER_MIN_HEIGHT : 0,
+    };
 
     if (shouldShowResolvedSupportTicketFooter) {
         return (
@@ -121,11 +128,8 @@ function ReportFooter() {
 
     // Happy path — user can compose
     if (!shouldHideComposer) {
-        const composer = (
-            <SwipeableView onSwipeDown={Keyboard.dismiss}>
-                <ReportActionCompose reportID={reportIDFromRoute} />
-            </SwipeableView>
-        );
+        const composerContent = <ReportActionCompose reportID={reportIDFromRoute} />;
+        const composer = isKeyboardAwareLayout ? composerContent : <SwipeableView onSwipeDown={Keyboard.dismiss}>{composerContent}</SwipeableView>;
         // The callout decides for itself whether this mount suits the layout and the composer size.
         const merchantRuleBanner = (
             <MerchantRuleSuggestionBanner
@@ -210,14 +214,13 @@ function ReportFooter() {
     // Admins-only room — keep the banner visible; mount the composer above it while editing on narrow screens.
     if (isAdminsOnlyPostingRoom && !isUserPolicyAdmin) {
         const isEditingWithComposer = shouldShowComposerForActiveEditDraft;
+        const editComposer = <ReportActionCompose.EditOnly reportID={reportIDFromRoute} />;
 
         return (
             <View style={[styles.chatFooter, !isEditingWithComposer && styles.mt4, shouldUseNarrowLayout && styles.mb5]}>
                 {isEditingWithComposer && (
                     <View style={[isComposerFullSize ? styles.chatFooterFullCompose : undefined, styles.mb2]}>
-                        <SwipeableView onSwipeDown={Keyboard.dismiss}>
-                            <ReportActionCompose.EditOnly reportID={reportIDFromRoute} />
-                        </SwipeableView>
+                        {isKeyboardAwareLayout ? editComposer : <SwipeableView onSwipeDown={Keyboard.dismiss}>{editComposer}</SwipeableView>}
                     </View>
                 )}
                 <Banner
