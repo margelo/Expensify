@@ -54,8 +54,8 @@ async function signInEmulator(platform: PlatformName, device: string, appID: str
             } catch (error) {
                 // The sign-in screen stays visible until Authenticate returns and the account's first data load mounts the tabs.
                 if (Date.now() > deadline) {
-                    const reason = readSignInError(platform, device, appID);
-                    throw reason ? new Error(`The app did not sign in to the CI account: ${reason}`) : error;
+                    const reason = readSignInError(platform, device, appID) ?? 'it reported no error, so it is still waiting or never read the sign-in file';
+                    throw new Error(`The app did not sign in to the CI account: ${reason}`, {cause: error});
                 }
             }
             await sleep(2000);

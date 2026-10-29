@@ -1,7 +1,8 @@
 import {isRecord} from '@libs/ObjectUtils';
 
 // The workflow places this file outside the app's cache directory, so profile pulls never copy it.
-const EMULATOR_SIGN_IN_FILE = 'pgo-ci-sign-in.json';
+// It must not end in .json: on its first iOS launch, Expensify Classic moves those files out of Documents.
+const EMULATOR_SIGN_IN_FILE = 'pgo-ci-sign-in.txt';
 // The app writes why it could not sign in next to the sign-in file. The runner prints it when sign-in times out.
 const EMULATOR_SIGN_IN_ERROR_FILE = 'pgo-ci-sign-in-error.txt';
 // shortcut: the session refreshes only at launch, so Auth must keep tokens valid for this long plus one journey; refresh on 407 if that changes.

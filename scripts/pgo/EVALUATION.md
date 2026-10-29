@@ -19,13 +19,14 @@ Open **Expensify/App → Settings → Secrets and variables → Actions** and lo
 
 The workflow also uses the existing `OS_BOTIFY_TOKEN` and `MAPBOX_SDK_DOWNLOAD_TOKEN` secrets.
 
-If the three required secrets exist, go to step 3.
+If the three required secrets exist, go to step 3. If a run then fails at `account-preflight` because `Authenticate` returned 401, Expensify rejected the login. Replace it as in step 2.
 
-## Step 2: Add a test account login if the secrets are missing
+## Step 2: Add or replace the test account login
 
 1. Choose a dedicated test account that meets the [account requirements](#account-requirements).
 2. Create a partner login for it, the same kind the E2E tests used.
-3. Add the account email, the `partnerUserID` and the `partnerUserSecret` as the three required secrets from step 1.
+3. Save the account email, the `partnerUserID` and the `partnerUserSecret` as the three required secrets from step 1.
+4. If the login comes from a New Expensify or Expensify Classic sign-in, delete `EXPENSIFY_PARTNER_NAME` and `EXPENSIFY_PARTNER_PASSWORD` if they exist, so the app uses its own partner name. If another partner issued it, save that partner's name and password in them.
 
 ## Step 3: Copy the branch to Expensify/App
 
@@ -76,7 +77,7 @@ The rollout uses dedicated phones instead. Someone signs each phone in by hand o
 | --- | --- |
 | `Check repository secrets` | A required secret is missing. The error names it. |
 | `build-release`, `build-instrumented` or `build-optimized` | A native build failed. The job log has the compiler error. |
-| `account-preflight` | The app did not sign in, or search found no single `(you)` chat or `#announce` room. Check the [account requirements](#account-requirements). |
+| `account-preflight` | The app did not sign in, or search found no single `(you)` chat or `#announce` room. A sign-in error shows the code and message from `Authenticate`. Code 401 means a wrong or revoked login, or the wrong partner for it, so replace the login as in [step 2](#step-2-add-or-replace-the-test-account-login). Otherwise, check the [account requirements](#account-requirements). |
 | `training` | A training journey failed, for example because a Spend list had nothing to scroll. The job log names the journey step. |
 | A benchmark stage, such as `journey-release-first` | A benchmark run failed in that scenario and order. The job log shows the failing step. |
 
