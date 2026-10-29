@@ -1,4 +1,4 @@
-// cspell:ignore BEGINSWITH devicectl
+// cspell:ignore devicectl
 
 /** Implements iOS benchmark setup, launch, process control, and marker collection through CoreDevice. */
 
@@ -7,7 +7,7 @@ import {isJSONArray, isJSONObject} from '@src/types/utils/JSONUtils';
 import type {JsonValue} from 'type-fest';
 
 import {env, file} from 'bun';
-import {mkdtempSync, rmSync} from 'node:fs';
+import {existsSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -31,12 +31,17 @@ type CoreDeviceInstalledAppsResponse = {
 
 /** Creates an iOS benchmark adapter that manages app state and polls per-span markers through CoreDevice. */
 async function createIOSAdapter({rootDirectory, deviceIdentifier, appID}: Omit<NativeAppBenchmarkAdapterOptions, 'platform'>): Promise<NativeAppBenchmarkAdapter> {
-    const {run, runAllowFailure} = createCommandHelpers(rootDirectory);
+    const {capture, run, runAllowFailure} = createCommandHelpers(rootDirectory);
     const environmentDeviceIdentifier = env.IOS_DEVICE_ID;
     const device = await resolveIOSDevice(rootDirectory, deviceIdentifier ?? environmentDeviceIdentifier);
+    const simulator = parseBootedIOSSimulators(await capture('xcrun', ['simctl', 'list', 'devices', 'booted', '--json'])).includes(device);
     let runningProcessIdentifier: number | undefined;
     /** Best-effort terminates the process tracked by this adapter and clears the cached identifier. */
     const terminate = async (): Promise<void> => {
+        if (simulator) {
+            await runAllowFailure('xcrun', ['simctl', 'terminate', device, appID]);
+            return;
+        }
         if (runningProcessIdentifier === undefined) {
             return;
         }
@@ -45,6 +50,10 @@ async function createIOSAdapter({rootDirectory, deviceIdentifier, appID}: Omit<N
     };
     /** Launches the app through CoreDevice and caches the process identifier from its JSON response. */
     const launch = async (): Promise<void> => {
+        if (simulator) {
+            await run('xcrun', ['simctl', 'launch', '--terminate-running-process', device, appID]);
+            return;
+        }
         const temporaryDirectory = createTemporaryDirectory('expensify-benchmark-ios-launch-');
         const jsonPath = join(temporaryDirectory, 'launch.json');
         try {
@@ -58,6 +67,9 @@ async function createIOSAdapter({rootDirectory, deviceIdentifier, appID}: Omit<N
     };
     /** Resolves a process that may predate this adapter by matching the app's installed executable path. */
     const resolveRunningProcessIdentifier = async (): Promise<number | undefined> => {
+        if (simulator) {
+            return undefined;
+        }
         const temporaryDirectory = createTemporaryDirectory('expensify-benchmark-ios-process-');
         const appsJSONPath = join(temporaryDirectory, 'apps.json');
         const processesJSONPath = join(temporaryDirectory, 'processes.json');
@@ -67,20 +79,7 @@ async function createIOSAdapter({rootDirectory, deviceIdentifier, appID}: Omit<N
             const rawAppsResponse = (await file(appsJSONPath).json()) as JsonValue;
             const appsResponse = parseIOSInstalledAppsResponse(rawAppsResponse);
             const appURL = parseIOSInstalledAppURL(appsResponse, appID);
-            const escapedAppURL = appURL.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
-            await run('xcrun', [
-                'devicectl',
-                'device',
-                'info',
-                'processes',
-                '--device',
-                device,
-                '--filter',
-                `executable.absoluteString BEGINSWITH '${escapedAppURL}'`,
-                '--json-output',
-                processesJSONPath,
-                '--quiet',
-            ]);
+            await run('xcrun', iOSProcessListArguments(device, processesJSONPath));
             // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
             const processesResponse = (await file(processesJSONPath).json()) as JsonValue;
             return parseIOSRunningAppProcessIdentifier(processesResponse, appURL);
@@ -90,6 +89,10 @@ async function createIOSAdapter({rootDirectory, deviceIdentifier, appID}: Omit<N
     };
     /** Copies one marker from the app data container, returning undefined when the marker is unavailable. */
     const readBenchmarkMarker = async (spanName: string): Promise<string | undefined> => {
+        if (simulator) {
+            const markerPath = join((await capture('xcrun', ['simctl', 'get_app_container', device, appID, 'data'])).trim(), iOSBenchmarkMarkerPath(spanName));
+            return existsSync(markerPath) ? readFileSync(markerPath, 'utf8') : undefined;
+        }
         // CoreDevice cannot stream the launched app's console output, so collect the marker written to the iOS app container instead.
         const temporaryDirectory = createTemporaryDirectory('expensify-benchmark-ios-marker-');
         const localPath = join(temporaryDirectory, 'benchmark.log');
@@ -137,9 +140,9 @@ async function createIOSAdapter({rootDirectory, deviceIdentifier, appID}: Omit<N
                     throw new Error(`iOS app not found at ${appPath}.`);
                 }
                 if (mode === 'cold') {
-                    await runAllowFailure('xcrun', ['devicectl', 'device', 'uninstall', 'app', '--device', device, appID]);
+                    await runAllowFailure('xcrun', simulator ? ['simctl', 'uninstall', device, appID] : ['devicectl', 'device', 'uninstall', 'app', '--device', device, appID]);
                 }
-                await run('xcrun', ['devicectl', 'device', 'install', 'app', '--device', device, appPath]);
+                await run('xcrun', simulator ? ['simctl', 'install', device, appPath] : ['devicectl', 'device', 'install', 'app', '--device', device, appPath]);
             }
             await sleep(RELAUNCH_DELAY_MS);
         },
@@ -270,6 +273,25 @@ function parseIOSRunningAppProcessIdentifier(response: JsonValue, appURL: string
     return typeof processIdentifier === 'number' && Number.isInteger(processIdentifier) && processIdentifier > 0 ? processIdentifier : undefined;
 }
 
+/** Lists every process so client-side matching works across CoreDevice versions with different filter field names. */
+function iOSProcessListArguments(deviceIdentifier: string, outputPath: string): string[] {
+    return ['devicectl', 'device', 'info', 'processes', '--device', deviceIdentifier, '--json-output', outputPath, '--quiet'];
+}
+
+/** Lists booted simulator UDIDs so the adapter can use simctl instead of CoreDevice for them. */
+function parseBootedIOSSimulators(output: string): string[] {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    const response = JSON.parse(output) as JsonValue;
+    if (!isJSONObject(response) || !isJSONObject(response.devices)) {
+        throw new Error('simctl returned an unexpected device-list response.');
+    }
+    return Object.values(response.devices).flatMap((runtimeDevices) =>
+        isJSONArray(runtimeDevices)
+            ? runtimeDevices.flatMap((simulator) => (isJSONObject(simulator) && simulator.state === 'Booted' && typeof simulator.udid === 'string' ? [simulator.udid] : []))
+            : [],
+    );
+}
+
 /** Maps a span name to its encoded marker path inside the iOS app data container. */
 function iOSBenchmarkMarkerPath(spanName: string): string {
     return `${IOS_BENCHMARK_DIRECTORY}/${encodeURIComponent(spanName)}.log`;
@@ -283,5 +305,14 @@ function isCoreDeviceInstalledApp(value: JsonValue): value is CoreDeviceInstalle
     return isJSONObject(value) && typeof value.bundleIdentifier === 'string' && typeof value.url === 'string';
 }
 
-export {createIOSAdapter, iOSBenchmarkMarkerPath, parseIOSInstalledAppURL, parseIOSInstalledAppsResponse, parseIOSLaunchProcessIdentifier, parseIOSRunningAppProcessIdentifier};
+export {
+    createIOSAdapter,
+    iOSBenchmarkMarkerPath,
+    parseBootedIOSSimulators,
+    iOSProcessListArguments,
+    parseIOSInstalledAppURL,
+    parseIOSInstalledAppsResponse,
+    parseIOSLaunchProcessIdentifier,
+    parseIOSRunningAppProcessIdentifier,
+};
 export type {CoreDeviceInstalledAppsResponse};
