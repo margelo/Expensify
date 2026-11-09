@@ -1,5 +1,5 @@
 /** Renders report messages with history controls, unread indicators, and loading states. */
-import {renderScrollComponent as renderActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
+import ActionSheetAwareScrollView, {renderScrollComponent as renderActionSheetAwareScrollView} from '@components/ActionSheetAwareScrollView';
 import MerchantRuleSuggestionBanner from '@components/MerchantRuleSuggestionBanner';
 import {ReportActionsAnimatedSkeletonCover} from '@components/ReportActionsSkeletonCover';
 import ReportActionsSkeletonView from '@components/ReportActionsSkeletonView';
@@ -11,14 +11,16 @@ import useMarkAsRead from '@hooks/useMarkAsRead';
 import useNetwork from '@hooks/useNetwork';
 import useOnyx from '@hooks/useOnyx';
 import useRetireMerchantRuleSuggestionOnLeave from '@hooks/useRetireMerchantRuleSuggestionOnLeave';
+import useSafeAreaPaddings from '@hooks/useSafeAreaPaddings';
 import useSidePanelState from '@hooks/useSidePanelState';
 import useThemeStyles from '@hooks/useThemeStyles';
 import useUnreadMarker from '@hooks/useUnreadMarker';
 
+import canUseKeyboardGestureArea from '@libs/canUseKeyboardGestureArea';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackRouteProp} from '@libs/Navigation/PlatformStackNavigation/types';
 import {shouldHidePayAction} from '@libs/ReportActionsUtils';
-import {isArchivedReport} from '@libs/ReportUtils';
+import {isArchivedReport, isInvoiceReport, isMoneyRequestReport} from '@libs/ReportUtils';
 
 import type {ReportsSplitNavigatorParamList} from '@navigation/types';
 
@@ -38,6 +40,7 @@ import type * as OnyxTypes from '@src/types/onyx';
 
 import type {OnyxEntry} from 'react-native-onyx';
 
+import {KeyboardAwareLegendList} from '@legendapp/list/keyboard';
 import {LegendList} from '@legendapp/list/react-native';
 import {useRoute} from '@react-navigation/native';
 import React, {useEffect, useState} from 'react';
@@ -64,6 +67,7 @@ const REPORT_ACTIONS_ESTIMATED_ITEM_SIZE = 50;
  */
 function ReportActionsListContent({reportID, onLayout}: ReportActionsListProps) {
     const styles = useThemeStyles();
+    const safeAreaPaddings = useSafeAreaPaddings(true);
     const {translate} = useLocalize();
     const {isProduction} = useEnvironment();
 
@@ -80,6 +84,9 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListProps) 
         shouldShowConciergeWelcome,
         isConciergeHistoryExpanded,
     } = useReportActionsListState();
+    // Expense and invoice tables still rely on the screen's keyboard avoidance.
+    const isKeyboardAwareList = canUseKeyboardGestureArea() && !!report && !isMoneyRequestReport(report) && !isInvoiceReport(report);
+    const ListComponent = isKeyboardAwareList ? KeyboardAwareLegendList : LegendList;
 
     // Remove rows hidden by the renderer before calculating summary counts, headers, and scroll positions.
     const paymentFilteredReportActions = report?.isWaitingOnBankAccount ? unfilteredReportActions.filter((action) => !shouldHidePayAction(action, true)) : unfilteredReportActions;
@@ -162,6 +169,7 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListProps) 
     const {
         listID,
         legendListProps,
+        syncScrollOffsetFromList,
         loadedInitialViewportListID,
         shouldShowInitialViewportSkeleton,
         shouldShowNewerActionsSkeleton,
@@ -295,7 +303,7 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListProps) 
                 report={report}
                 isReportArchived={isReportArchived}
             >
-                <LegendList
+                <ListComponent
                     {...legendListProps}
                     accessibilityLabel={Platform.OS === 'web' ? undefined : translate('sidebarScreen.listOfChatMessages')}
                     aria-label={Platform.OS === 'web' ? translate('sidebarScreen.listOfChatMessages') : undefined}
@@ -308,7 +316,13 @@ function ReportActionsListContent({reportID, onLayout}: ReportActionsListProps) 
                     estimatedItemSize={REPORT_ACTIONS_ESTIMATED_ITEM_SIZE}
                     recycleItems
                     experimental_hideItemsUntilMeasured
-                    renderScrollComponent={Platform.OS === 'web' ? undefined : renderActionSheetAwareScrollView}
+                    {...(isKeyboardAwareList
+                        ? {ScrollViewComponent: ActionSheetAwareScrollView, keyboardOffset: safeAreaPaddings.paddingBottom}
+                        : {renderScrollComponent: Platform.OS === 'web' ? undefined : renderActionSheetAwareScrollView})}
+                    keyboardDismissMode={isKeyboardAwareList ? 'interactive' : undefined}
+                    onContentInsetChange={isKeyboardAwareList ? syncScrollOffsetFromList : undefined}
+                    automaticallyAdjustContentInsets={isKeyboardAwareList ? false : undefined}
+                    contentInsetAdjustmentBehavior={isKeyboardAwareList ? 'never' : undefined}
                     scrollEventThrottle={16}
                     contentContainerStyle={[styles.chatContentScrollView, styles.pb0]}
                     ListHeaderComponent={olderHistoryHeader}

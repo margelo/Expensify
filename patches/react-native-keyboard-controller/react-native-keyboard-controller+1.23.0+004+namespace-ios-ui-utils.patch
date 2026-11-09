@@ -1,0 +1,24 @@
+diff --git a/node_modules/react-native-keyboard-controller/ios/core/UIUtils.swift b/node_modules/react-native-keyboard-controller/ios/core/UIUtils.swift
+--- a/node_modules/react-native-keyboard-controller/ios/core/UIUtils.swift
++++ b/node_modules/react-native-keyboard-controller/ios/core/UIUtils.swift
+@@ -8,7 +8,7 @@
+ 
+ import Foundation
+ 
+-@objc(UIUtils)
++@objc(RNKCUIUtils)
+ public final class UIUtils: NSObject {
+   @objc public static let nextFrame = 1.0 / 60
+ }
+diff --git a/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm b/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm
+--- a/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm
++++ b/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm
+@@ -156,7 +156,7 @@
+ #ifdef RCT_NEW_ARCH_ENABLED
+     // Layout events can precede Fabric mounting. Allow a display interval before the only lookup.
+     dispatch_after(
+-        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(UIUtils.nextFrame * NSEC_PER_SEC)),
++        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(RNKCUIUtils.nextFrame * NSEC_PER_SEC)),
+         dispatch_get_main_queue(),
+         measure);
+ #else

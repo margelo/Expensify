@@ -343,8 +343,10 @@ function useReportActionsListScroll({
 
     const trackScrollPositionAndThreshold = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
         trackLinkedMessageScroll(event);
-        const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
-        const distanceFromBottom = Math.max(0, contentSize.height - layoutMeasurement.height - contentOffset.y);
+        const {contentInset, contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+        // The keyboard controller adds space through insets, which LegendList includes in its measured content length.
+        const contentHeight = legendListRef.current?.getState()?.contentLength ?? contentSize.height + (contentInset?.bottom ?? 0);
+        const distanceFromBottom = Math.max(0, contentHeight - layoutMeasurement.height - contentOffset.y);
         distanceFromBottomRef.current = distanceFromBottom;
         const previousMetrics = lastScrollMetricsRef.current;
         const canFollowListEnd = readyEndListIDRef.current === listID && !hasNewerActions;
@@ -360,7 +362,7 @@ function useReportActionsListScroll({
                 const hasReaderMovedAwayFromEnd =
                     (previousMetrics && contentOffset.y < previousMetrics.offset - 1) ||
                     (previousMetrics &&
-                        previousMetrics.contentHeight === contentSize.height &&
+                        previousMetrics.contentHeight === contentHeight &&
                         previousMetrics.viewportHeight === layoutMeasurement.height &&
                         endCorrectionFrameRef.current === undefined);
                 if (hasReaderMovedAwayFromEnd) {
@@ -369,7 +371,7 @@ function useReportActionsListScroll({
                 }
             }
         }
-        lastScrollMetricsRef.current = {offset: contentOffset.y, contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height};
+        lastScrollMetricsRef.current = {offset: contentOffset.y, contentHeight, viewportHeight: layoutMeasurement.height};
 
         checkPaginationOnScroll();
 
@@ -395,16 +397,26 @@ function useReportActionsListScroll({
         scrollToActionBadgeTarget,
     });
 
+    // A keyboard inset can settle after the final native scroll event.
+    const syncScrollOffsetFromList = () => {
+        if (readyEndListIDRef.current !== listID) {
+            return;
+        }
+        const state = legendListRef.current?.getState();
+        if (!state) {
+            return;
+        }
+        const distanceFromBottom = Math.max(0, state.contentLength - state.scrollLength - state.scroll);
+        scrollOffsetRef.current = distanceFromBottom;
+        distanceFromBottomRef.current = distanceFromBottom;
+        trackVerticalScrolling(undefined);
+        onScrolledOverThresholdChange(distanceFromBottom >= CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD);
+    };
+
     // Keep bottom-relative scroll metrics current when the viewport is resized.
     const recordTimeToMeasureItemLayout = (event: LayoutChangeEvent) => {
         onLayout?.(event);
-        const state = legendListRef.current?.getState();
-        const canMeasureBottomOffset = state && readyEndListIDRef.current === listID;
-        if (canMeasureBottomOffset) {
-            const distanceFromBottom = Math.max(0, state.contentLength - state.scrollLength - state.scroll);
-            scrollOffsetRef.current = distanceFromBottom;
-            distanceFromBottomRef.current = distanceFromBottom;
-        }
+        syncScrollOffsetFromList();
         scheduleEndCorrection();
         // A resized viewport changes the pagination threshold.
         checkPaginationOnScroll();
@@ -437,6 +449,7 @@ function useReportActionsListScroll({
         shouldShowOlderPaginationLoadingIndicator,
         shouldShowNewerPaginationLoadingIndicator,
         onNewerFooterLayout: updateNewerFooterHeight,
+        syncScrollOffsetFromList,
         legendListProps: {
             ref: legendListRef,
             keyExtractor: getReportActionKey,

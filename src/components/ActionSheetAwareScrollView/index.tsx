@@ -35,3 +35,5 @@ const renderScrollComponent: RenderActionSheetAwareScrollViewComponent = (props)
 };
 
 export {renderScrollComponent, ActionSheetAwareScrollViewProvider, Actions, useActionSheetAwareScrollViewState, useActionSheetAwareScrollViewActions};
+
+export default ActionSheetAwareScrollView;

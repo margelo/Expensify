@@ -98,23 +98,14 @@ export default function useReportUnreadMessageScrollTracking({
     const updatePillVisibility = () => {
         const hasUnreadMarkerReportAction = unreadMarkerReportActionIndex !== -1;
 
+        // Each position must update visibility because keyboard inset and scroll events can be batched.
         // display floating button if we're scrolled more than the offset
-        if (
-            currentVerticalScrollingOffsetRef.current > CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD &&
-            !isFloatingMessageCounterVisible &&
-            !hasUnreadMarkerReportAction &&
-            !shouldBeAlignedToTop
-        ) {
+        if (currentVerticalScrollingOffsetRef.current > CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD && !hasUnreadMarkerReportAction && !shouldBeAlignedToTop) {
             setIsFloatingMessageCounterVisible(true);
         }
 
         // hide floating button if we're scrolled closer than the offset
-        if (
-            currentVerticalScrollingOffsetRef.current < CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD &&
-            isFloatingMessageCounterVisible &&
-            !hasUnreadMarkerReportAction &&
-            !hasNewerActions
-        ) {
+        if (currentVerticalScrollingOffsetRef.current < CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD && !hasUnreadMarkerReportAction && !hasNewerActions) {
             setIsFloatingMessageCounterVisible(false);
         }
     };

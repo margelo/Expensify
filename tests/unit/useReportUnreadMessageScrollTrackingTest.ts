@@ -250,6 +250,33 @@ describe('useReportUnreadMessageScrollTracking', () => {
             expect(result.current.isFloatingMessageCounterVisible).toBe(false);
         });
 
+        it('keeps the pill hidden when keyboard updates move away from and back to the end in one batch', () => {
+            // Given a chat is at its newest message without an unread marker.
+            const offsetRef = {current: 0};
+            const {result} = renderHook(() =>
+                useReportUnreadMessageScrollTracking({
+                    reportID,
+                    currentVerticalScrollingOffsetRef: offsetRef,
+                    onUnreadActionVisible: jest.fn(),
+                    onTrackScrolling: jest.fn(),
+                    hasNewerActions: false,
+                    unreadMarkerReportActionIndex: -1,
+                    isInverted: false,
+                }),
+            );
+
+            // When a keyboard inset and its matching scroll correction arrive before React renders again.
+            act(() => {
+                offsetRef.current = CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD + 100;
+                result.current.trackVerticalScrolling(undefined);
+                offsetRef.current = 0;
+                result.current.trackVerticalScrolling(undefined);
+            });
+
+            // Then the last position wins, so the Latest messages pill stays hidden.
+            expect(result.current.isFloatingMessageCounterVisible).toBe(false);
+        });
+
         it('returns floatingMessage visibility as true when scrolling outside of threshold', () => {
             // Given
             const offsetRef = {current: 0};

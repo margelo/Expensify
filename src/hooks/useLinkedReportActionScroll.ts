@@ -150,9 +150,10 @@ function useLinkedReportActionScroll({listID, linkedReportActionID, targetIndex,
         if (position === undefined) {
             return;
         }
-        const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+        const {contentInset, contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
         const linkedActionOffset = position + (state?.headerSize ?? 0) - CONST.REPORT.ACTIONS.LINKED_MESSAGE_OFFSET;
-        const maximumScrollOffset = contentSize.height - layoutMeasurement.height;
+        const contentHeight = state?.contentLength ?? contentSize.height + (contentInset?.bottom ?? 0);
+        const maximumScrollOffset = contentHeight - layoutMeasurement.height;
         const targetOffset = Math.max(0, Math.min(linkedActionOffset, maximumScrollOffset));
         // Native anchoring can commit after the row-size correction. Check the resulting viewport
         // as well, so that late adjustment cannot move a successfully positioned link out of view.

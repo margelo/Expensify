@@ -1,0 +1,104 @@
+diff --git a/node_modules/@legendapp/list/keyboard.js b/node_modules/@legendapp/list/keyboard.js
+--- a/node_modules/@legendapp/list/keyboard.js
++++ b/node_modules/@legendapp/list/keyboard.js
+@@ -132,6 +132,8 @@
+     freeze,
+     keyboardLiftBehavior,
+     keyboardOffset,
++    onContentInsetChange: onContentInsetChangeProp,
++    ScrollViewComponent,
+     refScrollView,
+     ...rest
+   } = props;
+@@ -236,8 +238,9 @@
+       } else {
+         list == null ? void 0 : list.reportContentInset(insets);
+       }
+-    },
+-    [endScrollFreeze, getEndInset, keyboard, keyboardTarget]
++      onContentInsetChangeProp == null ? void 0 : onContentInsetChangeProp(insets);
++    },
++    [endScrollFreeze, getEndInset, keyboard, keyboardTarget, onContentInsetChangeProp]
+   );
+   const reportClosingInset = React.useCallback((bottom) => {
+     var _a2;
+@@ -295,6 +298,7 @@
+           freeze,
+           keyboardLiftBehavior,
+           offset: keyboardOffset,
++          ScrollViewComponent,
+           onContentInsetChange,
+           onContentSizeChange: (width, height) => {
+             var _a2;
+@@ -317,6 +321,7 @@
+       freeze,
+       keyboardLiftBehavior,
+       keyboardOffset,
++      ScrollViewComponent,
+       onContentInsetChange
+     ]
+   );
+diff --git a/node_modules/@legendapp/list/keyboard.mjs b/node_modules/@legendapp/list/keyboard.mjs
+--- a/node_modules/@legendapp/list/keyboard.mjs
++++ b/node_modules/@legendapp/list/keyboard.mjs
+@@ -111,6 +111,8 @@
+     freeze,
+     keyboardLiftBehavior,
+     keyboardOffset,
++    onContentInsetChange: onContentInsetChangeProp,
++    ScrollViewComponent,
+     refScrollView,
+     ...rest
+   } = props;
+@@ -215,8 +217,9 @@
+       } else {
+         list == null ? void 0 : list.reportContentInset(insets);
+       }
+-    },
+-    [endScrollFreeze, getEndInset, keyboard, keyboardTarget]
++      onContentInsetChangeProp == null ? void 0 : onContentInsetChangeProp(insets);
++    },
++    [endScrollFreeze, getEndInset, keyboard, keyboardTarget, onContentInsetChangeProp]
+   );
+   const reportClosingInset = useCallback((bottom) => {
+     var _a2;
+@@ -274,6 +277,7 @@
+           freeze,
+           keyboardLiftBehavior,
+           offset: keyboardOffset,
++          ScrollViewComponent,
+           onContentInsetChange,
+           onContentSizeChange: (width, height) => {
+             var _a2;
+@@ -296,6 +300,7 @@
+       freeze,
+       keyboardLiftBehavior,
+       keyboardOffset,
++      ScrollViewComponent,
+       onContentInsetChange
+     ]
+   );
+diff --git a/node_modules/@legendapp/list/keyboard.d.ts b/node_modules/@legendapp/list/keyboard.d.ts
+--- a/node_modules/@legendapp/list/keyboard.d.ts
++++ b/node_modules/@legendapp/list/keyboard.d.ts
+@@ -318,7 +318,11 @@
+     reportContentInset(inset?: Partial<Insets$1> | null): void;
+ };
+ 
+-type KeyboardChatScrollViewPropsUnique = Omit<KeyboardChatScrollViewProps, keyof ScrollViewProps | "inverted" | "ScrollViewComponent" | "blankSpace" | "extraContentPadding" | "onContentInsetChange" | "offset">;
++type KeyboardChatScrollViewPropsUnique = Omit<KeyboardChatScrollViewProps, keyof ScrollViewProps | "inverted" | "ScrollViewComponent" | "blankSpace" | "extraContentPadding" | "offset">;
++type KeyboardAwareScrollViewComponentProps = NonNullable<KeyboardChatScrollViewProps["ScrollViewComponent"]> extends React.ForwardRefExoticComponent<infer Props> ? Omit<Props, "ref"> & {
++    ref?: React.Ref<React.ElementRef<typeof ScrollViewComponent>>;
++} : never;
++type KeyboardAwareScrollViewComponent = (props: KeyboardAwareScrollViewComponentProps) => React.ReactElement | null;
+ type ScrollMessageToEndOptions = {
+     animated: boolean;
+     closeKeyboard: boolean;
+@@ -350,6 +354,7 @@
+     anchoredEndSpace?: AnchoredEndSpaceConfig;
+     contentInsetEndAdjustment?: SharedValue<number>;
+     keyboardOffset?: number;
++    ScrollViewComponent?: KeyboardAwareScrollViewComponent;
+ } & React.RefAttributes<LegendListRef>) => React.ReactElement | null;
+ 
+ export { KeyboardAwareLegendList, useKeyboardChatComposerInset, useKeyboardScrollToEnd };
