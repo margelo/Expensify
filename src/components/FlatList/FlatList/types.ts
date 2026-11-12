@@ -7,12 +7,6 @@ type CustomFlatListProps<T> = Omit<FlatListProps<T>, 'CellRendererComponent'> & 
     ref?: ForwardedRef<FlatList>;
     shouldDisableVisibleContentPosition?: boolean;
 
-    /**
-     * Whether to use the animated keyboard handler capabilities on native (iOS and Android)
-     * Allows for interactive keyboard dismissal when the user drags the keyboard down
-     */
-    enableAnimatedKeyboardDismissal?: boolean;
-
     CellRendererComponent?: React.ComponentType<CellRendererProps<T>> | null;
 
     /**

@@ -10322,11 +10322,6 @@ const CONST = {
         RESTORE_RHP_ANIMATION: 'restoreRHPAnimation',
     },
 
-    LIST_BEHAVIOR: {
-        REGULAR: 'regular',
-        INVERTED: 'inverted',
-    },
-
     VIOLATION_DISMISSAL: {
         rter: {
             manual: 'marked this receipt as cash',
