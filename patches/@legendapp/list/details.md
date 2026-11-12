@@ -1,6 +1,6 @@
 # `@legendapp/list` patches
 
-Each patch is the build output of its upstream PR, so it changes exactly what that PR changes. Remove a patch once a LegendList release contains its PR.
+Patches 001-007 match the build output of their upstream PRs. Patch 008 exposes the custom scroll view and inset callback needed by the keyboard integration.
 
 ### [@legendapp+list+3.7.2+001+apply-pending-anchor-correction.patch](@legendapp+list+3.7.2+001+apply-pending-anchor-correction.patch)
 
@@ -64,3 +64,12 @@ Each patch is the build output of its upstream PR, so it changes exactly what th
 - E/App issue: 🛑
 - PR introducing patch: https://github.com/Expensify/App/pull/100733
 - Reproduction: On iOS or Android, open a chat with more history than the first page. Turn off the network connection. Turn the network connection back on. The messages on screen should not move when the placeholder above them disappears.
+
+### [@legendapp+list+3.7.2+008+keyboard-scroll-view-component.patch](@legendapp+list+3.7.2+008+keyboard-scroll-view-component.patch)
+
+- Reason: `KeyboardAwareLegendList` renders its own scroll view and doesn't accept a custom one. The patch exposes and forwards `ScrollViewComponent`, so RNKC drives the action-sheet-aware scroll view and message menus keep their keyboard spacing and scroll ref. It also forwards `onContentInsetChange` after updating the list's insets, so the Latest messages pill and unread tracking can refresh when the keyboard settles without another scroll event.
+- Scope: Only `KeyboardAwareLegendList`, and only when `ScrollViewComponent` or `onContentInsetChange` is passed. LegendList's own inset reporting is unchanged on both platforms.
+- Upstream PR/issue: 🛑
+- E/App issue: https://github.com/Expensify/App/issues/54270
+- PR introducing patch: 🛑
+- Reproduction: On iOS, open a chat, focus the composer, and long-press a message. The message menu should open above the keyboard, and dragging the chat down should dismiss the keyboard with the composer attached.

@@ -33,27 +33,38 @@ const THRESHOLD = CONST.REPORT.ACTIONS.ACTION_VISIBLE_THRESHOLD;
 type ScrollEvent = {
     nativeEvent: {
         contentOffset: {x: number; y: number};
+        contentInset?: {bottom: number};
         contentSize: {height: number; width: number};
         layoutMeasurement: {height: number; width: number};
     };
 };
 type CapturedListProps = {
     onScroll?: (event: ScrollEvent) => void;
+    onReady?: () => void;
+    onContentInsetChange?: () => void;
 };
 
 let capturedListProps: CapturedListProps = {};
+let mockListContentLength: number | undefined;
+let mockListScroll = 0;
 jest.mock('@hooks/useUnreadMarker', () => jest.fn(() => ({unreadMarkerReportActionID: null})));
 jest.mock('@hooks/useMarkAsRead', () => jest.fn(() => ({markNewestActionAsRead: jest.fn(), completeSkippedMarkAsRead: jest.fn()})));
 const mockUseUnreadMarker: jest.Mock = jest.requireMock('@hooks/useUnreadMarker');
 const mockUseMarkAsRead: jest.Mock = jest.requireMock('@hooks/useMarkAsRead');
 
 jest.mock('@legendapp/list/react-native', () => {
-    const {forwardRef} = jest.requireActual<typeof React>('react');
+    const {forwardRef, useEffect, useImperativeHandle} = jest.requireActual<typeof React>('react');
     return {
         // The second parameter is intentionally unused; forwardRef requires it to avoid a React development warning.
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         LegendList: forwardRef<unknown, CapturedListProps>((props, ref) => {
-            capturedListProps = props;
+            useImperativeHandle(ref, () => ({
+                getState: () => ({contentLength: mockListContentLength, scroll: mockListScroll, scrollLength: 500}),
+                scrollToEnd: jest.fn(),
+            }));
+            useEffect(() => {
+                capturedListProps = props;
+            });
             return null;
         }),
     };
@@ -126,6 +137,8 @@ async function renderList(initialOffset: number) {
 
 beforeEach(async () => {
     capturedListProps = {};
+    mockListContentLength = undefined;
+    mockListScroll = 0;
     mockUseUnreadMarker.mockClear();
     mockUseMarkAsRead.mockClear();
     setHasRadio(true);
@@ -167,6 +180,47 @@ describe('ReportActionsList visible-action threshold', () => {
         await renderList(0);
 
         // Then both consumers receive the bottom state immediately.
+        expect(mockUseUnreadMarker).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledOverThreshold: false}));
+        expect(mockUseMarkAsRead).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledToEnd: true}));
+    });
+
+    it.each([
+        {platform: 'iOS', bottomInset: 300, contentLength: undefined},
+        {platform: 'Android', bottomInset: 0, contentLength: 1300},
+    ])('keeps a reader above the newest message when the $platform keyboard extends the scroll range', async ({bottomInset, contentLength}) => {
+        // Given an open keyboard adds space beyond the native content height.
+        await renderList(0);
+        mockListContentLength = contentLength;
+        const event = createScrollEvent(THRESHOLD + 50);
+        event.nativeEvent.contentInset = {bottom: bottomInset};
+        event.nativeEvent.contentOffset.y += 300;
+
+        // When the reader is above the visible end even though the native content ends within the viewport.
+        act(() => capturedListProps.onScroll?.(event));
+
+        // Then unread tracking and mark-as-read preserve the reader's position.
+        expect(mockUseUnreadMarker).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledOverThreshold: true}));
+        expect(mockUseMarkAsRead).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledToEnd: false}));
+    });
+
+    it('updates both consumers when the keyboard inset settles without another scroll event', async () => {
+        // Given the keyboard inset leaves the last native scroll event above the end.
+        await renderList(0);
+        mockListContentLength = 1000 + THRESHOLD + 50;
+        mockListScroll = 500;
+        act(() => {
+            capturedListProps.onReady?.();
+            capturedListProps.onScroll?.(createScrollEvent(0));
+        });
+        expect(mockUseUnreadMarker).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledOverThreshold: true}));
+        expect(mockUseMarkAsRead).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledToEnd: false}));
+
+        // When the keyboard closes and updates the list's insets without scrolling it.
+        mockListContentLength = 1000;
+        expect(capturedListProps.onContentInsetChange).toBeDefined();
+        act(() => capturedListProps.onContentInsetChange?.());
+
+        // Then unread tracking and mark-as-read see the newest action again.
         expect(mockUseUnreadMarker).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledOverThreshold: false}));
         expect(mockUseMarkAsRead).toHaveBeenLastCalledWith(expect.objectContaining({isScrolledToEnd: true}));
     });

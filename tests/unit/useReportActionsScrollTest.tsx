@@ -548,6 +548,29 @@ describe('useReportActionsScroll', () => {
             platform.restore();
         });
 
+        it('keeps an aligned linked message within the keyboard-extended scroll range', async () => {
+            // Given a linked action is aligned beyond the native content's end while the keyboard is open.
+            mockRouteParams = {reportActionID: LINKED_ACTION_ID};
+            mockLinkedActionPosition = 4700;
+            const {result} = await renderScroll({renderedVisibleReportActions: [makeAction(LINKED_ACTION_ID), makeAction('999')]});
+            act(() => result.current.onLoad());
+            flushTransitions();
+            mockScrollToIndex.mockClear();
+
+            // When native scrolling reports content without the keyboard inset that LegendList includes in its state.
+            act(() =>
+                result.current.trackLinkedMessageScroll(
+                    createMock<Parameters<typeof result.current.trackLinkedMessageScroll>[0]>({
+                        nativeEvent: {contentOffset: {x: 0, y: 4400}, contentSize: {width: 300, height: 4700}, layoutMeasurement: {width: 300, height: 600}},
+                    }),
+                ),
+            );
+            flushTransitions();
+
+            // Then the already clamped link does not trigger another positioning scroll.
+            expect(mockScrollToIndex).not.toHaveBeenCalled();
+        });
+
         it('restores a linked message moved out of view by a late native scroll adjustment', async () => {
             // Given the linked message has already landed below a measured long predecessor.
             mockRouteParams = {reportActionID: LINKED_ACTION_ID};
